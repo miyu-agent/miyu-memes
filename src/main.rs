@@ -4,6 +4,7 @@
 mod calls;
 mod library;
 mod methods;
+mod packs;
 mod reminder;
 mod search;
 mod settings;
@@ -74,6 +75,7 @@ fn serve() -> ExitCode {
         eprintln!("package.methods refused: {error}");
         return ExitCode::from(2);
     }
+    resync(&state);
     drop(reading.join());
     ExitCode::SUCCESS
 }
@@ -104,6 +106,7 @@ fn read(wire: &Arc<Wire>, state: &Arc<State>) {
                         .apply(keys);
                 }
             }
+            (Some("content.changed"), None) => resync(state),
             (None, Some(id)) => {
                 let answer = match message.get("error") {
                     Some(error) => Err(error.clone()),
@@ -114,6 +117,15 @@ fn read(wire: &Arc<Wire>, state: &Arc<State>) {
             (Some(_) | None, None) => {}
         }
     }
+}
+
+/// 在后台把内容包对一遍（起来时、核心推 `content.changed` 时）：读图要等核心，不挡着读的一头。
+fn resync(state: &Arc<State>) {
+    let state = Arc::clone(state);
+    std::thread::spawn(move || match packs::sync(&state) {
+        Ok(synced) => eprintln!("content packs synced: {synced:?}"),
+        Err(error) => eprintln!("content packs not synced: {error}"),
+    });
 }
 
 /// 办核心发来的一条请求。

@@ -30,6 +30,10 @@ CREATE TABLE IF NOT EXISTS vectors (
     vector BLOB NOT NULL,
     PRIMARY KEY (id, model)
 );
+CREATE TABLE IF NOT EXISTS packs (
+    package TEXT PRIMARY KEY,
+    digest TEXT NOT NULL
+);
 ";
 
 /// 一张表情包。
@@ -170,6 +174,12 @@ impl Library {
         )?;
         if changed > 0 {
             self.db.execute("DELETE FROM vectors WHERE id = ?1", [id])?;
+            // 内容包带来的被人改过：卸了包也留下（`packs.rs`）。
+            self.db.execute(
+                "UPDATE memes SET source = json_set(source, '$.edited', json('true'))
+                 WHERE id = ?1 AND json_extract(source, '$.kind') = 'pack'",
+                [id],
+            )?;
         }
         Ok(changed > 0)
     }
@@ -244,6 +254,8 @@ fn meme_of(row: &rusqlite::Row<'_>) -> rusqlite::Result<Meme> {
         uses: row.get(10)?,
     })
 }
+
+mod packs;
 
 #[cfg(test)]
 mod tests;
