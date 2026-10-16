@@ -101,3 +101,27 @@ fn a_json_reply_is_read_first_and_lines_are_the_fallback() {
         "不是 JSON 的交给照行读"
     );
 }
+
+#[test]
+fn a_refusal_carries_the_specific_reason_not_the_generic_line() {
+    let core = Fake {
+        reply: Err(json!({
+            "code": -32010,
+            "message": "No model is available.",
+            "data": {"reason": "no_model", "message": "model \"dev/x\" does not take images"}
+        })),
+        asked: Mutex::new(Vec::new()),
+    };
+    let error = describe(&core, "sha256:aa", "zh").unwrap_err();
+    assert_eq!(error["message"], "model \"dev/x\" does not take images");
+    assert_eq!(error["data"]["reason"], "no_model", "别的格不动");
+    let plain = Fake {
+        reply: Err(json!({"code": -32000, "message": "busy"})),
+        asked: Mutex::new(Vec::new()),
+    };
+    assert_eq!(
+        describe(&plain, "sha256:aa", "zh").unwrap_err()["message"],
+        "busy",
+        "没有具体原因的照原话"
+    );
+}

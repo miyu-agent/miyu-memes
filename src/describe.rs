@@ -24,11 +24,20 @@ pub fn describe(core: &dyn Core, blob: &str, language: &str) -> Result<(String, 
             {"role": "user", "text": format!("Language: {language}"), "images": [blob]},
         ],
     });
-    let answer = core.call("model.call", &asked)?;
+    let answer = core.call("model.call", &asked).map_err(specific)?;
     let text = answer["text"].as_str().unwrap_or_default();
     json_of(text)
         .or_else(|| parse(text))
         .ok_or_else(|| json!({"code": -32000, "message": UNREADABLE}))
+}
+
+/// 核心拒了的，外层是笼统的一句（例如 `No model is available.`），具体原因在 `data.message`（没配看图模型、配的模型看不了
+/// 图……，核心施工 X-23）：换成具体的那句往上交，页面才说得清为什么（项目主人 10-16 实测：只看得到笼统那句）。
+fn specific(mut error: Value) -> Value {
+    if let Some(detail) = error["data"]["message"].as_str().map(str::to_string) {
+        error["message"] = Value::String(detail);
+    }
+    error
 }
 
 /// 照要的回一个 JSON（实测 10-16：只说「两行」时，中文的回答把行头也翻成了「第一行」「第二行」，第二行还接着描述）：取第一个

@@ -137,8 +137,13 @@ import { openUpload } from './upload.js';
     /** 底下冒一句、过一会儿收起。 */
     toast,
     /** 让 AI 写描述没成：说人话。 */
-    describeError: (error) => (String(reasonOf(error)).includes('no vision model')
-      ? say('no_vision') : say('describe_failed', { reason: reasonOf(error) })),
+    // 核心的原话（包转的是具体那句，describe.rs）：没配看图模型、配的模型看不了图各说一句，别的照原话。
+    describeError: (error) => {
+      const reason = String(reasonOf(error));
+      if (reason.includes('no vision model')) return say('no_vision');
+      if (reason.includes('does not take images')) return say('vision_blind');
+      return say('describe_failed', { reason });
+    },
   };
 
   let toastTimer = 0;
