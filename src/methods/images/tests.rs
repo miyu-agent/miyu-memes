@@ -83,7 +83,7 @@ fn a_big_image_comes_back_whole_in_chunks_that_join_cleanly() {
 }
 
 #[test]
-fn an_upload_is_put_into_the_core_and_refused_when_too_big_or_not_an_image() {
+fn an_upload_is_put_into_the_core_and_refused_when_not_an_image() {
     let put = json!({"blob": "sha256:b", "media_type": "image/gif", "width": 4, "height": 5, "kind": "image"});
     let core = fake(0, put);
     let params = json!({"data": "AAAA", "name": "a.gif", "description": "d", "usage": "u"});
@@ -95,7 +95,11 @@ fn an_upload_is_put_into_the_core_and_refused_when_too_big_or_not_an_image() {
         core.asked.lock().unwrap()[0].1,
         json!({"data": "AAAA", "name": "a.gif"})
     );
-    assert_eq!(store(&core, &params, 2).unwrap_err()["message"], "too_big");
+    assert_eq!(
+        store(&core, &params, 2).unwrap_err()["message"],
+        "not_image",
+        "超了要缩，解不开的就是不是图"
+    );
     let text = fake(0, json!({"blob": "sha256:c", "kind": "text"}));
     assert_eq!(
         store(&text, &params, 3).unwrap_err()["message"],

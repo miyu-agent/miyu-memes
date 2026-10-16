@@ -1,7 +1,8 @@
-// 传图：对话框里拖进或选一张，人写描述和用法，读成 base64 交给包的 `upload`（包再 blob.put 存进核心）。超过设置的大小、不是
-// 图的当场说；库里已经有的照样选中它，说一句「已在库中」。
+// 传图：对话框里拖进或选一张，人写描述和用法，读成 base64 交给包的 `upload`（包再 blob.put 存进核心）。超过上限的先缩
+// （shrink.js），缩不进来的、不是图的当场说；库里已经有的照样选中它，说一句「已在库中」。
 
 import { fill } from './detail.js';
+import { WIRE, fitted } from './shrink.js';
 
 /** 读成 base64（不带 data: 那一截）。 */
 function base64(file) {
@@ -38,12 +39,13 @@ export function openUpload(ui) {
   const ready = () => Boolean(file && description.value.trim() && usage.value.trim());
   const refresh = () => { submit.disabled = !ready(); };
 
-  function choose(next) {
+  async function choose(next) {
     note.textContent = '';
     if (!next) return;
     if (!next.type.startsWith('image/')) { note.textContent = say('not_image'); return; }
-    if (next.size > ui.maxMb() * 1024 * 1024) { note.textContent = say('too_big', { max: ui.maxMb() }); return; }
-    file = next;
+    const fit = await fitted(next, Math.min(ui.maxMb() * 1024 * 1024, WIRE)).catch(() => null);
+    if (!fit) { note.textContent = say('cannot_shrink'); return; }
+    file = fit;
     if (preview) URL.revokeObjectURL(preview);
     preview = URL.createObjectURL(next);
     shown.src = preview;

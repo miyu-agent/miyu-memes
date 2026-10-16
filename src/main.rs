@@ -9,6 +9,7 @@ mod packs;
 mod reminder;
 mod search;
 mod settings;
+mod shrink;
 mod tools;
 mod wire;
 
@@ -145,12 +146,7 @@ fn request(state: &State, method: &str, params: &Value) -> wire::Answer {
                 .unwrap_or_else(PoisonError::into_inner)
                 .all(true)
                 .is_ok_and(|memes| !memes.is_empty());
-            Ok(reminder::answer(
-                params,
-                &settings,
-                stocked,
-                reminder::roll(),
-            ))
+            Ok(reminder::answer(&settings, stocked, reminder::roll()))
         }
         "method.call" => methods::call(state, params),
         _ => Err(wire::unknown_method()),

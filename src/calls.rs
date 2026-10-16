@@ -5,11 +5,14 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use serde_json::{Value, json};
 
 use crate::library::{Library, NewMeme};
 use crate::search::{Embed, search};
 use crate::settings::Settings;
+use crate::shrink::{Why, fitted};
 use crate::wire::{Answer, Wire};
 
 /// 核心那一头：测试里换成假的。
@@ -152,17 +155,30 @@ fn save(library: &Library, core: &dyn Core, args: &Value, cwd: Option<&str>, max
         return Ok(fail("Give path, description and usage."));
     };
     let path = resolve(path, cwd);
-    match std::fs::metadata(&path) {
+    let request = match std::fs::metadata(&path) {
+        // 超了先缩（`shrink.rs`）：读进来缩好，按字节交给核心。
         Ok(meta) if meta.len() > max => {
-            return Ok(fail(&format!(
-                "The file is larger than {} MiB.",
-                max / 1024 / 1024
-            )));
+            let Ok(bytes) = std::fs::read(&path) else {
+                return Ok(fail("Cannot read that file."));
+            };
+            let name = path
+                .file_name()
+                .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+            match fitted(bytes, &name, max) {
+                Ok((bytes, name)) => json!({ "data": STANDARD.encode(bytes), "name": name }),
+                Err(Why::NotImage) => return Ok(fail("That file is not an image.")),
+                Err(Why::TooBig) => {
+                    return Ok(fail(&format!(
+                        "The image is over {} MiB and cannot be shrunk to fit: it is animated or too large.",
+                        max / 1024 / 1024
+                    )));
+                }
+            }
         }
-        Ok(_) => {}
+        Ok(_) => json!({ "path": path }),
         Err(_) => return Ok(fail("Cannot read that file.")),
-    }
-    let Ok(put) = core.call("blob.put", &json!({ "path": path })) else {
+    };
+    let Ok(put) = core.call("blob.put", &request) else {
         return Ok(fail("Cannot read that file."));
     };
     if put["kind"] != "image" {

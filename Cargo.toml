@@ -19,6 +19,8 @@ serde_json = "1"
 rusqlite = { version = "0.37", features = ["bundled"] }
 # 内容包的文件经 content.read 分块交来（base64），整张拼好再交 blob.put。
 base64 = "0.22"
+# 单张超过上限的先缩再存（shrink.rs）：只开这几种图的编解码，和核心用的同一版。
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 
 [lints.rust]
 unsafe_code = "forbid"

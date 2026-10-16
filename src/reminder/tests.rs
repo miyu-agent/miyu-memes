@@ -4,41 +4,29 @@ use super::{HINT, answer, roll};
 use crate::settings::Settings;
 
 #[test]
-fn a_hit_under_the_chance_in_an_open_venue_with_stock() {
+fn a_hit_under_the_chance_with_the_switch_on_and_stock() {
     let settings = Settings {
         probability: 10,
         ..Settings::default()
     };
-    let local = json!({"session": "s", "venue": "local"});
+    assert_eq!(answer(&settings, true, 9)["content"][0]["text"], HINT);
+    assert_eq!(answer(&settings, true, 10)["content"], json!([]), "没中");
     assert_eq!(
-        answer(&local, &settings, true, 9)["content"][0]["text"],
-        HINT
-    );
-    assert_eq!(
-        answer(&local, &settings, true, 10)["content"],
-        json!([]),
-        "没中"
-    );
-    assert_eq!(
-        answer(&local, &settings, false, 0)["content"],
+        answer(&settings, false, 0)["content"],
         json!([]),
         "库里没有能发的"
     );
-    let closed = Settings {
-        group: false,
+    let off = Settings {
+        reminder: false,
         ..settings.clone()
     };
-    assert_eq!(
-        answer(&json!({"venue": "group"}), &closed, true, 0)["content"],
-        json!([]),
-        "群里关了"
-    );
+    assert_eq!(answer(&off, true, 0)["content"], json!([]), "关了");
     let never = Settings {
         probability: 0,
         ..settings
     };
     assert_eq!(
-        answer(&local, &never, true, 0)["content"],
+        answer(&never, true, 0)["content"],
         json!([]),
         "概率 0 从不提醒"
     );

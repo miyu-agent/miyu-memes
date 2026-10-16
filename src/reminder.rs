@@ -1,5 +1,5 @@
 //! 每一轮掷一次（设计 34 第二节第 7 条）：核心回合开始问 `user.append {session, venue, text?}`（核心施工 X-16 补），中了交一句，
-//! 排在她要回的那句话后面。概率、场所开关照配置；库里一张能发的都没有的不提醒。原文是给模型看的，登记在 `docs/prompt-ledger.md`。
+//! 排在她要回的那句话后面。开关、概率照配置；库里一张能发的都没有的不提醒。原文是给模型看的，登记在 `docs/prompt-ledger.md`。
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -24,10 +24,9 @@ pub fn roll() -> u8 {
     u8::try_from(x % 100).unwrap_or(0)
 }
 
-/// 照这一轮的 `params`、现在的配置、库里有没有能发的、掷出的 `rolled` 答。
-pub fn answer(params: &Value, settings: &Settings, stocked: bool, rolled: u8) -> Value {
-    let venue = params["venue"].as_str().unwrap_or_default();
-    let hit = stocked && settings.reminds_in(venue) && rolled < settings.probability;
+/// 照现在的配置、库里有没有能发的、掷出的 `rolled` 答。
+pub fn answer(settings: &Settings, stocked: bool, rolled: u8) -> Value {
+    let hit = stocked && settings.reminder && rolled < settings.probability;
     if hit {
         json!({"content": [{"kind": "meme", "text": HINT}]})
     } else {

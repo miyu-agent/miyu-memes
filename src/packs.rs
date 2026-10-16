@@ -12,6 +12,7 @@ use serde_json::{Value, json};
 
 use crate::calls::{Core, State, now};
 use crate::library::NewMeme;
+use crate::shrink::fitted;
 
 /// 同一时刻只读一遍：两次推送挨着来，后一遍等前一遍读完。
 static SYNCING: Mutex<()> = Mutex::new(());
@@ -103,10 +104,11 @@ fn import(
             synced.skipped += 1;
             continue;
         };
+        let name = file.rsplit('/').next().unwrap_or(file);
         let Some(put) = read_all(state.core.as_ref(), package, file)
             .ok()
-            .filter(|bytes| bytes.len() as u64 <= max)
-            .and_then(|bytes| put(state.core.as_ref(), file, &bytes))
+            .and_then(|bytes| fitted(bytes, name, max).ok())
+            .and_then(|(bytes, name)| put(state.core.as_ref(), &name, &bytes))
         else {
             synced.skipped += 1;
             continue;
@@ -134,8 +136,7 @@ fn size(value: &Value) -> u32 {
 }
 
 /// 交给核心存成 blob，是图的交回 `blob.put` 的回应。
-fn put(core: &dyn Core, file: &str, bytes: &[u8]) -> Option<Value> {
-    let name = file.rsplit('/').next().unwrap_or(file);
+fn put(core: &dyn Core, name: &str, bytes: &[u8]) -> Option<Value> {
     let put = core
         .call(
             "blob.put",

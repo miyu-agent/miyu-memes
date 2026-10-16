@@ -9,11 +9,10 @@ const PACKAGE: &str = "miyu-memes";
 /// 现在的值。
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
+    /// 自动提醒发表情包开着没有（项目主人 10-16 定：一个开关，不分群里、私聊、本机）。
+    pub reminder: bool,
     /// 每一轮提醒的概率，百分数。
     pub probability: u8,
-    pub group: bool,
-    pub private: bool,
-    pub local: bool,
     /// 一张最大多少字节。
     pub max_bytes: u64,
 }
@@ -21,10 +20,8 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Settings {
         Settings {
+            reminder: true,
             probability: 3,
-            group: true,
-            private: true,
-            local: true,
             max_bytes: 5 * 1024 * 1024,
         }
     }
@@ -48,9 +45,7 @@ impl Settings {
                         .and_then(|n| u8::try_from(n.min(100)).ok())
                         .unwrap_or(fresh.probability);
                 }
-                "reminder_group" => self.group = value.as_bool().unwrap_or(fresh.group),
-                "reminder_private" => self.private = value.as_bool().unwrap_or(fresh.private),
-                "reminder_local" => self.local = value.as_bool().unwrap_or(fresh.local),
+                "reminder" => self.reminder = value.as_bool().unwrap_or(fresh.reminder),
                 "max_size_mb" => {
                     self.max_bytes = value
                         .as_u64()
@@ -58,16 +53,6 @@ impl Settings {
                 }
                 _ => {}
             }
-        }
-    }
-
-    /// 这种场所开着提醒没有。
-    pub fn reminds_in(&self, venue: &str) -> bool {
-        match venue {
-            "group" => self.group,
-            "private" => self.private,
-            "local" => self.local,
-            _ => false,
         }
     }
 }
