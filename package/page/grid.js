@@ -1,5 +1,5 @@
 // 网格：一张一格，缩略图加描述的头一行；停用的变淡、角上写「已停用」。点一格交给 ui.select。格子照编号留着，重画时只换
-// 字和选中，图不重取。
+// 字和选中，图不重取；先后没变就不动 DOM（摘下再挂回去会把进场动画重播一遍，10-16 换一张整页闪）。
 
 /** 描述的头一行（句号、换行为止）。 */
 function firstLine(text) {
@@ -23,6 +23,7 @@ export function gridView(ui) {
     const badge = h('span', { class: 'badge', text: say('disabled') });
     const button = h('button', { class: 'cell enter', type: 'button', role: 'listitem', onclick: () => ui.select(meme.id) },
       h('span', { class: 'thumb' }, img, badge), caption);
+    button.addEventListener('animationend', () => button.classList.remove('enter'), { once: true });
     return { button, caption, badge };
   }
 
@@ -42,7 +43,8 @@ export function gridView(ui) {
         known.badge.hidden = meme.enabled;
         return known.button;
       });
-      list.replaceChildren(...order);
+      const now = list.children;
+      if (now.length !== order.length || order.some((button, at) => now[at] !== button)) list.replaceChildren(...order);
       note.textContent = message;
     },
   };

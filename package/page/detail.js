@@ -115,9 +115,11 @@ export function detailView(ui) {
         el.classList.add('is-opening');
       }
       if (!same) {
-        img.classList.remove('is-loaded');
-        img.removeAttribute('src');
-        ui.images.url(next.id).then((src) => { if (meme?.id === next.id) img.src = src; }, () => {});
+        // 旧图留到新图到了再换，框高固定（style.css .frame）：换一张不塌、不跳。
+        if (opening) img.classList.remove('is-loaded');
+        ui.images.url(next.id).then((src) => { if (meme?.id === next.id) img.src = src; }, () => {
+          if (meme?.id === next.id) img.removeAttribute('src');
+        });
         description.value = next.description;
         usage.value = next.usage;
         note.textContent = '';
