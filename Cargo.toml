@@ -1,0 +1,26 @@
+[package]
+name = "miyu-memes"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+publish = false
+license = "GPL-3.0-or-later"
+description = "Miyu 的表情包软件包：她能存、查、发、改、删表情包，按意思搜，隔一阵提醒她发一张。"
+
+[[bin]]
+name = "miyu-memes"
+path = "src/main.rs"
+
+[dependencies]
+# 跟核心说的是一行一条的 JSON-RPC（作者说明第四节）。
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# 表情库：一个 SQLite 文件放在核心给的工作目录里（作者说明第四节第 1 条）。bundled：三个平台不靠系统的 libsqlite3。
+rusqlite = { version = "0.37", features = ["bundled"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"

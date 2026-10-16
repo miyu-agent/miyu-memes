@@ -1,0 +1,62 @@
+# 表情包（设计：核心仓库 docs/designs/34-表情包.md）。给人看的字，不发给模型。
+
+[package]
+version = "0.1.0"
+protocol = [1, 1]
+name = { en = "Memes", zh = "表情包", ja = "スタンプ" }
+summary = { en = "She saves, finds and sends stickers", zh = "她能存、找、发表情包", ja = "スタンプを保存・検索・送信する" }
+icon = "smile"
+
+[command]
+name = "memes"
+program = "miyu-memes"
+about = { en = "Memes package", zh = "表情包", ja = "スタンプ" }
+
+[process]
+args = ["serve"]
+start = "always"
+# tools：五件工具；context.inject：每一轮掷一次，中了往她要回的那句话后面加一句提醒（user.append）。
+capabilities = ["tools", "context.inject"]
+
+# 给别的软件调（核心施工 X-18）：接入QQ 以后「偷表情包」经它放图、按意思找。
+[export]
+methods = ["add", "search"]
+
+[settings.reminder_probability]
+type = "int"
+min = 0
+max = 100
+default = 3
+layers = ["system"]
+applies = "now"
+name = { en = "Reminder chance (%)", zh = "提醒概率（%）", ja = "リマインド確率（%）" }
+
+[settings.reminder_group]
+type = "bool"
+default = true
+layers = ["system"]
+applies = "now"
+name = { en = "Remind in groups", zh = "群里提醒", ja = "グループでリマインド" }
+
+[settings.reminder_private]
+type = "bool"
+default = true
+layers = ["system"]
+applies = "now"
+name = { en = "Remind in private chats", zh = "私聊里提醒", ja = "個別チャットでリマインド" }
+
+[settings.reminder_local]
+type = "bool"
+default = true
+layers = ["system"]
+applies = "now"
+name = { en = "Remind on this computer", zh = "本机提醒", ja = "このPCでリマインド" }
+
+[settings.max_size_mb]
+type = "int"
+min = 1
+max = 20
+default = 5
+layers = ["system"]
+applies = "now"
+name = { en = "Largest image (MiB)", zh = "单张上限（MiB）", ja = "画像の上限（MiB）" }
