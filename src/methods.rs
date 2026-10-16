@@ -3,20 +3,28 @@
 
 use serde_json::{Value, json};
 
+mod images;
+
+use std::sync::{Mutex, MutexGuard, PoisonError};
+
 use crate::calls::{CoreEmbed, State, now};
 use crate::library::{Library, NewMeme};
 use crate::search::search;
 use crate::wire::Answer;
 
-/// 登记的方法：后台页的七个，加给别的软件的两个（清单 `[export]`）。
-pub const NAMES: [&str; 9] = [
-    "list", "get", "update", "delete", "restore", "purge", "upload", "add", "search",
+/// 登记的方法：后台页的八个，加给别的软件的两个（清单 `[export]`）。
+pub const NAMES: [&str; 10] = [
+    "list", "get", "image", "update", "delete", "restore", "purge", "upload", "add", "search",
 ];
 
 /// `package.methods` 的参数。
 pub fn register() -> Value {
     let methods: Vec<Value> = NAMES.iter().map(|name| json!({ "name": name })).collect();
     json!({ "methods": methods })
+}
+
+fn locked<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 fn bad(why: &str) -> Value {
@@ -34,10 +42,24 @@ fn id_of(params: &Value) -> Result<&str, Value> {
 pub fn call(state: &State, request: &Value) -> Answer {
     let params = &request["params"];
     let from = request["from"].as_str();
-    let library = state
-        .library
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    // 要等核心的两样先办，不拿着库的锁等。
+    match request["method"].as_str().unwrap_or_default() {
+        "image" => {
+            let id = id_of(params)?;
+            let meme = locked(&state.library)
+                .get(id)
+                .map_err(|error| json!({"code": -32000, "message": error.to_string()}))?
+                .ok_or_else(|| json!({"code": -32000, "message": "no such sticker"}))?;
+            return images::image(state.core.as_ref(), &meme);
+        }
+        "upload" => {
+            let max = locked(&state.settings).max_bytes;
+            let stored = images::store(state.core.as_ref(), params, max)?;
+            return put(&locked(&state.library), &stored, None);
+        }
+        _ => {}
+    }
+    let library = locked(&state.library);
     let done = match request["method"].as_str().unwrap_or_default() {
         "list" => library.all(false).map(|memes| json!({ "memes": memes })),
         "get" => {
@@ -61,7 +83,7 @@ pub fn call(state: &State, request: &Value) -> Answer {
             let id = id_of(params)?;
             library.purge(id).map(|found| json!({ "found": found }))
         }
-        "upload" | "add" => return put(&library, params, from),
+        "add" => return put(&library, params, from),
         "search" => {
             let query = params["query"].as_str().unwrap_or_default();
             let limit = params["limit"].as_u64().map_or(5, |n| n.clamp(1, 50));

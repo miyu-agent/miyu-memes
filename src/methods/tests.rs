@@ -10,6 +10,22 @@ use crate::wire::Answer;
 
 struct Off;
 
+/// 只答 `blob.put`、`blob.get` 的核心。
+struct Blobs;
+
+impl Core for Blobs {
+    fn call(&self, method: &str, _: &Value) -> Answer {
+        match method {
+            "blob.put" => Ok(
+                json!({"blob": format!("sha256:{}", "c".repeat(64)), "media_type": "image/png",
+                                    "width": 8, "height": 9, "kind": "image"}),
+            ),
+            "blob.get" => Ok(json!({"data": "iVBO", "size": 3})),
+            _ => Err(json!({"code": -32601})),
+        }
+    }
+}
+
 impl Core for Off {
     fn call(&self, _: &str, _: &Value) -> Answer {
         Err(json!({"code": -32010}))
@@ -52,7 +68,7 @@ fn another_package_adds_with_its_name_and_origin_and_people_upload_as_human() {
     assert_eq!(source["package"], "onebot");
     assert_eq!(source["platform"], "qq");
     assert_eq!(got["meme"]["reason"], "funny");
-    let human = call(&state, &json!({"method": "upload", "params": image(&json!({"blob": format!("sha256:{}", "f".repeat(64))}))})).unwrap();
+    let human = call(&state, &json!({"method": "add", "params": image(&json!({"blob": format!("sha256:{}", "f".repeat(64))}))})).unwrap();
     let id = human["id"].as_str().unwrap();
     let got = call(&state, &json!({"method": "get", "params": {"id": id}})).unwrap();
     assert_eq!(got["meme"]["source"]["kind"], "human");
@@ -63,7 +79,7 @@ fn the_admin_page_lists_disables_restores_and_purges() {
     let state = state();
     call(
         &state,
-        &json!({"method": "upload", "params": image(&json!({}))}),
+        &json!({"method": "add", "params": image(&json!({}))}),
     )
     .unwrap();
     assert_eq!(
@@ -121,4 +137,31 @@ fn bad_params_and_unknown_methods_are_refused() {
         call(&state, &json!({"method": "nope"})).unwrap_err()["code"],
         -32601
     );
+}
+
+#[test]
+fn the_page_uploads_base64_as_human_and_reads_images_back() {
+    let mut state = state();
+    state.core = Arc::new(Blobs);
+    let params = json!({"data": "iVBO", "name": "a.png", "description": "A cat.", "usage": "Hi."});
+    let added = call(&state, &json!({"method": "upload", "params": params})).unwrap();
+    assert_eq!(added, json!({"id": "cccccccc", "created": true}));
+    let got = call(
+        &state,
+        &json!({"method": "get", "params": {"id": "cccccccc"}}),
+    )
+    .unwrap();
+    assert_eq!(got["meme"]["source"]["kind"], "human");
+    assert_eq!(got["meme"]["width"], 8);
+    let image = call(
+        &state,
+        &json!({"method": "image", "params": {"id": "cccccccc"}}),
+    )
+    .unwrap();
+    assert_eq!(image, json!({"media_type": "image/png", "data": "iVBO"}));
+    let missing = call(
+        &state,
+        &json!({"method": "image", "params": {"id": "nope"}}),
+    );
+    assert_eq!(missing.unwrap_err()["code"], -32000);
 }

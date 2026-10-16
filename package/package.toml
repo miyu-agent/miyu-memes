@@ -19,6 +19,9 @@ start = "always"
 capabilities = ["tools", "context.inject"]
 
 # 给别的软件调（核心施工 X-18）：接入QQ 以后「偷表情包」经它放图、按意思找。
+[page]
+dir = "page"
+
 [export]
 methods = ["add", "search"]
 

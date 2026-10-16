@@ -20,9 +20,11 @@ impl io::Write for Sink {
 }
 
 impl Sink {
+    /// 写完了的几行：一行可能分几次写进来，没写到换行的那一截不算。
     fn lines(&self) -> Vec<serde_json::Value> {
         let text = String::from_utf8(self.0.lock().expect("锁得上").clone()).expect("是字");
-        text.lines()
+        let done = text.rfind('\n').map_or("", |end| &text[..end]);
+        done.lines()
             .map(|line| serde_json::from_str(line).expect("一行一条 JSON"))
             .collect()
     }
