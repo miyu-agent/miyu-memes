@@ -1,0 +1,108 @@
+# 发包（施工 M-6）：推 `v*` 标签时三个平台各编 release 的 `miyu-memes`，拼成 `miyu-memes/` 文件夹（`package.toml`、
+# `page/`、`bin/miyu-memes`，Windows 带 `.exe`），打成 `miyu-memes-<版本>-<平台>.tar.gz`（Windows 用 `.zip`），挂到 GitHub
+# Release。用的人解开以后 `miyu pkg install ./miyu-memes`。
+#
+# 手动跑（workflow_dispatch，在 `step/**` 上试打）只编、打包、传成这一次跑的产物，不建 Release；版本写 `dev-<提交前 8 位>`。
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 平台照 Rust 的目标名写进包名。Linux 钉 24.04：同核心，glibc 2.39 为基线。
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - name: 装上 rust-toolchain.toml 钉住的工具链
+        run: rustup toolchain install
+      - name: 取编译缓存
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: release
+          save-if: false
+          add-rust-environment-hash-key: false
+      - name: 版本
+        id: version
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="dev-${GITHUB_SHA::8}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "版本：$version"
+      - name: 编 release
+        run: cargo build --release --locked -p miyu-memes
+      - name: 拼 miyu-memes/ 文件夹
+        run: |
+          exe=""
+          if [ "$RUNNER_OS" = "Windows" ]; then exe=".exe"; fi
+          rm -rf dist && mkdir -p dist/miyu-memes/bin
+          cp -R package/. dist/miyu-memes/
+          cp "target/release/miyu-memes$exe" "dist/miyu-memes/bin/miyu-memes$exe"
+          # 结构不对就不发：清单、后台页、程序都要在。
+          for need in package.toml page/index.html "bin/miyu-memes$exe"; do
+            [ -f "dist/miyu-memes/$need" ] || { echo "包里少了 miyu-memes/$need"; exit 1; }
+          done
+      - name: 打包
+        id: pack
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          name="miyu-memes-$VERSION-$TARGET"
+          cd dist
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            7z a -tzip "$name.zip" miyu-memes >/dev/null
+            file="$name.zip"
+          else
+            tar -czf "$name.tar.gz" miyu-memes
+            file="$name.tar.gz"
+          fi
+          echo "file=dist/$file" >> "$GITHUB_OUTPUT"
+          echo "打好了 $file"
+      - name: 传成这一次跑的产物
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.target }}
+          path: ${{ steps.pack.outputs.file }}
+          if-no-files-found: error
+
+  # 只有推标签的那一次建 Release，把三个包挂上去；手动跑的到上一步为止。
+  release:
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: 建 Release、挂上三个包
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -l dist
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes "表情包 $GITHUB_REF_NAME：下载自己平台的包，解开以后 miyu pkg install ./miyu-memes。"
