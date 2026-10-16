@@ -2,7 +2,7 @@ use std::sync::Mutex;
 
 use serde_json::{Value, json};
 
-use super::{describe, parse};
+use super::{describe, json_of, parse};
 use crate::calls::Core;
 use crate::wire::Answer;
 
@@ -23,7 +23,9 @@ impl Core for Fake {
 #[test]
 fn it_asks_the_configured_vision_model_with_the_image_and_reads_two_lines() {
     let core = Fake {
-        reply: Ok(json!({"text": "Description: 一只猫歪头。\nUsage: 卖萌的时候。"})),
+        reply: Ok(
+            json!({"text": "```json\n{\"description\": \"一只猫歪头。\", \"usage\": \"卖萌的时候。\"}\n```"}),
+        ),
         asked: Mutex::new(Vec::new()),
     };
     let got = describe(&core, "sha256:aa", "zh").unwrap();
@@ -66,4 +68,36 @@ fn the_two_lines_are_read_loosely() {
         Some(("A cat.".to_string(), "When greeting.".to_string()))
     );
     assert_eq!(parse("Description:\nUsage: x"), None, "空的那一行不算");
+    assert_eq!(
+        parse("描述：一只猫。\n用法：打招呼。"),
+        Some(("一只猫。".to_string(), "打招呼。".to_string()))
+    );
+    // 实测 10-16：模型照中文写、把行头也去掉了，照先后取头两行。
+    let bare = "一个黑色剪影的卡通人物举着「群主」牌子。\n\n适合在群聊里开玩笑时使用。";
+    assert_eq!(
+        parse(bare),
+        Some((
+            "一个黑色剪影的卡通人物举着「群主」牌子。".to_string(),
+            "适合在群聊里开玩笑时使用。".to_string()
+        ))
+    );
+    assert_eq!(parse("只有一行"), None);
+}
+
+#[test]
+fn a_json_reply_is_read_first_and_lines_are_the_fallback() {
+    assert_eq!(
+        json_of(r#"Sure: {"description": "A cat.", "usage": "Hi."}"#),
+        Some(("A cat.".to_string(), "Hi.".to_string()))
+    );
+    assert_eq!(
+        json_of(r#"{"description": "A cat.", "usage": " "}"#),
+        None,
+        "空的不算"
+    );
+    assert_eq!(
+        json_of("Description: a\nUsage: b"),
+        None,
+        "不是 JSON 的交给照行读"
+    );
 }

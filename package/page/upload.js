@@ -101,7 +101,7 @@ export function openUpload(ui) {
         dialog.close();
       }
     } catch (error) {
-      const reason = error?.message;
+      const reason = ui.reasonOf(error);
       note.textContent = reason === 'too_big' ? say('too_big', { max: ui.maxMb() })
         : reason === 'not_image' ? say('not_image') : ui.reasonOf(error);
       refresh();

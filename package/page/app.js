@@ -49,8 +49,9 @@ import { openUpload } from './upload.js';
     return el;
   }
 
+  /** 包回的原话：网页把包的错包在 `data.message` 里（外面是「方法执行失败」那一句），没有的照外面的。 */
   function reasonOf(error) {
-    return error?.message ?? String(error);
+    return error?.data?.message ?? error?.message ?? String(error);
   }
 
   /** 页面里的对话框问一句：按 `yes` 交回真。 */
@@ -136,7 +137,7 @@ import { openUpload } from './upload.js';
     /** 底下冒一句、过一会儿收起。 */
     toast,
     /** 让 AI 写描述没成：说人话。 */
-    describeError: (error) => (String(error?.message ?? '').includes('no vision model')
+    describeError: (error) => (String(reasonOf(error)).includes('no vision model')
       ? say('no_vision') : say('describe_failed', { reason: reasonOf(error) })),
   };
 
@@ -164,7 +165,7 @@ import { openUpload } from './upload.js';
       const got = await call('reindex');
       toast(say('reindexed', { count: got?.count ?? 0 }));
     } catch (error) {
-      toast(error?.message === 'embedding_off' ? say('embedding_off') : reasonOf(error), true);
+      toast(reasonOf(error) === 'embedding_off' ? say('embedding_off') : reasonOf(error), true);
     } finally {
       button.disabled = false;
       button.textContent = say('reindex');

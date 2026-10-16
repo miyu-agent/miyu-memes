@@ -6,13 +6,12 @@ use serde_json::{Value, json};
 use crate::calls::Core;
 
 /// 给看图模型的 system（登记在 `docs/prompt-ledger.md`「写描述」那一行）。
-const SYSTEM: &str = "You label a sticker image for a sticker library. Reply with exactly two lines.\n\
-Description: what the image shows, including any words written in it.\n\
-Usage: when it fits as a reply in a chat.\n\
-Write both lines in the language named in the request.";
+const SYSTEM: &str = "You label a sticker image for a sticker library. Reply with only a JSON object: \
+{\"description\": what the image shows, including any words written in it, \"usage\": when it fits as a reply in a chat}. \
+Write both values in the language named in the request.";
 
 /// 交回的字写得不对时的原话。
-const UNREADABLE: &str = "the vision reply has no Description and Usage lines";
+const UNREADABLE: &str = "the vision reply has no description and usage";
 
 /// 看 `blob` 那张图写描述、用法，照 `language`（`zh`、`en`、`ja`）。交回 `(描述, 用法)`；核心拒了的、写得不对的交回错。
 pub fn describe(core: &dyn Core, blob: &str, language: &str) -> Result<(String, String), Value> {
@@ -26,28 +25,59 @@ pub fn describe(core: &dyn Core, blob: &str, language: &str) -> Result<(String, 
         ],
     });
     let answer = core.call("model.call", &asked)?;
-    parse(answer["text"].as_str().unwrap_or_default())
+    let text = answer["text"].as_str().unwrap_or_default();
+    json_of(text)
+        .or_else(|| parse(text))
         .ok_or_else(|| json!({"code": -32000, "message": UNREADABLE}))
 }
 
-/// 从回答里取 `Description:`、`Usage:` 两行（不分大小写，冒号中英文都认）；有一行没有的不算。
+/// 照要的回一个 JSON（实测 10-16：只说「两行」时，中文的回答把行头也翻成了「第一行」「第二行」，第二行还接着描述）：取第一个
+/// `{` 到最后一个 `}`，`description`、`usage` 都不空的才算。
+fn json_of(text: &str) -> Option<(String, String)> {
+    let (start, end) = (text.find('{')?, text.rfind('}')?);
+    let value: Value = serde_json::from_str(text.get(start..=end)?).ok()?;
+    let field = |key: &str| {
+        value[key]
+            .as_str()
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(str::to_string)
+    };
+    Some((field("description")?, field("usage")?))
+}
+
+/// 认得的行头（读不成 JSON 时退回照行读）：英文照要的写，中文、日文是模型把行头也照语言写了（实测 10-16：claude-haiku 写中文时去掉了英文行头）。
+const DESCRIPTION: [&str; 4] = ["description", "描述", "说明", "説明"];
+const USAGE: [&str; 4] = ["usage", "用法", "使い方", "使いどころ"];
+
+/// 从回答里取描述、用法两行：带行头的照行头（冒号中英文都认、不分大小写、去掉 Markdown 的星号）；一个行头都没有的照先后取头两行
+/// 不空的。少了一样的不算。
 fn parse(text: &str) -> Option<(String, String)> {
+    let lines: Vec<&str> = text
+        .lines()
+        .map(|line| line.trim().trim_start_matches(['*', '-', ' ']).trim())
+        .filter(|line| !line.is_empty())
+        .collect();
     let mut description = None;
     let mut usage = None;
-    for line in text.lines() {
-        let line = line.trim().trim_start_matches(['*', '-', ' ']);
+    let mut labelled = false;
+    for line in &lines {
         let Some((head, rest)) = line.split_once([':', '：']) else {
             continue;
         };
+        let head = head.trim().trim_matches('*').to_lowercase();
         let rest = rest.trim().trim_matches('*').trim();
-        if rest.is_empty() {
-            continue;
+        if DESCRIPTION.contains(&head.as_str()) {
+            labelled = true;
+            description = (!rest.is_empty()).then(|| rest.to_string());
+        } else if USAGE.contains(&head.as_str()) {
+            labelled = true;
+            usage = (!rest.is_empty()).then(|| rest.to_string());
         }
-        match head.trim().trim_matches('*').to_ascii_lowercase().as_str() {
-            "description" => description = Some(rest.to_string()),
-            "usage" => usage = Some(rest.to_string()),
-            _ => {}
-        }
+    }
+    if !labelled && let [first, second, ..] = lines.as_slice() {
+        description = Some((*first).to_string());
+        usage = Some((*second).to_string());
     }
     Some((description?, usage?))
 }
