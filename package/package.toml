@@ -6,6 +6,8 @@ protocol = [1, 1]
 name = { en = "Memes", zh = "表情包", ja = "スタンプ" }
 summary = { en = "She saves, finds and sends stickers", zh = "她能存、找、发表情包", ja = "スタンプを保存・検索・送信する" }
 icon = "face-slightly-smiling"
+# 整个包围着图转：显示不了图片的会话（语音）里整包当没开（核心施工 X-25）。
+needs = ["images"]
 
 [command]
 name = "memes"
