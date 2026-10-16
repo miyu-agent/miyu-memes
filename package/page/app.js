@@ -172,7 +172,7 @@ import { openUpload } from './upload.js';
     const source = h('select', {
       class: 'select', 'aria-label': say('source'),
       onchange: () => { state.source = source.value; paint(); },
-    }, ['all', 'ai', 'human', 'package'].map(option));
+    }, ['all', 'ai', 'human', 'pack', 'package'].map(option));
     const disabled = h('input', {
       type: 'checkbox', onchange: () => { state.showDisabled = disabled.checked; paint(); },
     });

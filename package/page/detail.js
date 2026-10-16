@@ -60,7 +60,7 @@ export function detailView(ui) {
 
   function sourceText(source) {
     const kind = source?.kind;
-    return ['ai', 'human', 'package'].includes(kind) ? say(`source/${kind}`) : String(kind ?? '');
+    return ['ai', 'human', 'pack', 'package'].includes(kind) ? say(`source/${kind}`) : String(kind ?? '');
   }
 
   function fact(name, value) {
