@@ -41,5 +41,5 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          over=$(find src tests -name '*.rs' -print0 2>/dev/null | xargs -0 wc -l | awk '$2 != "total" && $1 > 500 {print}')
+          over=$(find . -path ./target -prune -o -name '*.rs' -print0 | xargs -0 wc -l | awk '$2 != "total" && $1 > 500 {print}')
           if [ -n "$over" ]; then echo "超过 500 行：" && echo "$over" && exit 1; fi
