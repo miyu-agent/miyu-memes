@@ -25,5 +25,8 @@ fn five_tools_named_with_the_package_prefix_and_short_descriptions() {
         assert!(description.is_ascii(), "给模型看的写英文：{description}");
         assert!(tool["display_name"]["zh"].is_string());
     }
-    assert_eq!(tools[1]["access"], "outbound", "发出去的照实写");
+    assert_eq!(
+        tools[1]["access"], "read",
+        "发表情包是回话的一部分，写 outbound 每发一张都要人确认"
+    );
 }

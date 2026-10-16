@@ -32,7 +32,8 @@ fn specs() -> Vec<Spec> {
                 "id": {"type": "string"},
                 "end": {"type": "boolean", "description": "Default true."}
             }, "required": ["id"]}),
-            access: "outbound",
+            // 跟她回的字一样是这一轮的回话，不往 Miyu 外面发：QQ 里由桥照回话投递。
+            access: "read",
             display: ["发送表情包", "Send a sticker", "スタンプを送る"],
         },
         Spec {
