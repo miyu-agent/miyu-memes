@@ -8,13 +8,16 @@ mod images;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::calls::{CoreEmbed, State, now};
+use crate::describe::describe;
 use crate::library::{Library, NewMeme};
+use crate::search::reindex;
 use crate::search::search;
 use crate::wire::Answer;
 
-/// 登记的方法：后台页的八个，加给别的软件的两个（清单 `[export]`）。
-pub const NAMES: [&str; 10] = [
+/// 登记的方法：后台页的十个，加给别的软件的两个（清单 `[export]`）。
+pub const NAMES: [&str; 12] = [
     "list", "get", "image", "update", "delete", "restore", "purge", "upload", "add", "search",
+    "describe", "reindex",
 ];
 
 /// `package.methods` 的参数。
@@ -25,6 +28,14 @@ pub fn register() -> Value {
 
 fn locked<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// 要写成哪种语言：页面交的 `language`（2 到 8 个小写字母），不合的照英文。
+fn language(params: &Value) -> &str {
+    params["language"]
+        .as_str()
+        .filter(|l| (2..=8).contains(&l.len()) && l.bytes().all(|b| b.is_ascii_lowercase()))
+        .unwrap_or("en")
 }
 
 fn bad(why: &str) -> Value {
@@ -56,6 +67,22 @@ pub fn call(state: &State, request: &Value) -> Answer {
             let max = locked(&state.settings).max_bytes;
             let stored = images::store(state.core.as_ref(), params, max)?;
             return put(&locked(&state.library), &stored, None);
+        }
+        // 让看图模型写描述、用法（项目主人 10-16）：库里的那一张写 `id`，还没传的写 `data`、`name`（先存进核心）。不存。
+        "describe" => {
+            let blob = if let Some(id) = params["id"].as_str() {
+                locked(&state.library)
+                    .get(id)
+                    .map_err(|error| json!({"code": -32000, "message": error.to_string()}))?
+                    .ok_or_else(|| json!({"code": -32000, "message": "no such sticker"}))?
+                    .hash
+            } else {
+                let max = locked(&state.settings).max_bytes;
+                let stored = images::store(state.core.as_ref(), params, max)?;
+                stored["blob"].as_str().unwrap_or_default().to_string()
+            };
+            let (description, usage) = describe(state.core.as_ref(), &blob, language(params))?;
+            return Ok(json!({ "description": description, "usage": usage }));
         }
         _ => {}
     }
@@ -95,6 +122,12 @@ pub fn call(state: &State, request: &Value) -> Answer {
             )
             .map(|memes| json!({ "memes": memes }))
         }
+        // 重新生成语义索引：照现在的 embedding 模型重算每一张；没开 embedding 的 `embedding_off`。
+        "reindex" => match reindex(&library, &CoreEmbed(state.core.as_ref())) {
+            Ok(Some((model, count))) => Ok(json!({ "model": model, "count": count })),
+            Ok(None) => return Err(json!({"code": -32000, "message": "embedding_off"})),
+            Err(error) => Err(error),
+        },
         _ => return Err(crate::wire::unknown_method()),
     };
     done.map_err(|error| json!({"code": -32000, "message": error.to_string()}))

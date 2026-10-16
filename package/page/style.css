@@ -19,6 +19,7 @@
   --field: color-mix(in srgb, var(--surface-2) 70%, var(--surface));
   --focus: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
   --text-faint: color-mix(in srgb, var(--text-soft) 62%, var(--surface));
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 :root[data-theme="dark"] {
@@ -128,4 +129,39 @@ dialog.upload .actions { justify-content: flex-end; }
   .cells { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
   .view.has-detail .grid { display: none; }
   .detail { width: 100%; padding: 4px 12px 24px; }
+}
+
+/* 动画（项目主人 10-16）：格子进来往上浮、图读到了淡入、详情从右边滑进来、对话框弹出、底下的提示滑上来、AI 写进框里的字亮一下。
+   系统要求少动的一律不动。 */
+.cell.enter { animation: rise 0.22s var(--ease) both; }
+.cell:active { transform: scale(0.98); }
+.cell { transition: background-color 0.15s ease, transform 0.12s ease; }
+.thumb img, .frame .large { opacity: 0; transition: opacity 0.2s ease; }
+.thumb img.is-loaded, .frame .large.is-loaded { opacity: 1; }
+.detail.is-opening { animation: slide-in 0.22s var(--ease) both; }
+dialog.sheet[open] { animation: pop 0.18s var(--ease) both; }
+dialog.sheet[open]::backdrop { animation: fade 0.18s ease both; }
+.button:active:not(:disabled) { transform: scale(0.97); }
+.button { transition: background-color 0.15s ease, transform 0.1s ease, opacity 0.15s ease; }
+textarea.is-filled { animation: flash 0.9s ease both; }
+.toast {
+  position: fixed; left: 50%; bottom: 20px; z-index: 10; max-width: calc(100% - 32px);
+  padding: 8px 14px; border-radius: 10px; background: var(--surface-2); color: var(--text);
+  box-shadow: 0 6px 24px color-mix(in srgb, var(--text) 14%, transparent);
+  opacity: 0; transform: translate(-50%, 12px); pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s var(--ease);
+}
+.toast.is-on { opacity: 1; transform: translate(-50%, 0); }
+.toast.is-error { color: var(--danger); }
+dialog.upload .actions .spacer { flex: 1; }
+
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+@keyframes slide-in { from { opacity: 0; transform: translateX(16px); } }
+@keyframes pop { from { opacity: 0; transform: scale(0.97) translateY(6px); } }
+@keyframes fade { from { opacity: 0; } }
+@keyframes flash { from { background: color-mix(in srgb, var(--accent) 22%, var(--field)); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after, ::backdrop { animation: none !important; transition: none !important; }
+  .thumb img, .frame .large { opacity: 1; }
 }

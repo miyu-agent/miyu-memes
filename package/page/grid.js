@@ -17,10 +17,11 @@ export function gridView(ui) {
 
   function cell(meme) {
     const img = h('img', { alt: '', draggable: 'false' });
+    img.addEventListener('load', () => img.classList.add('is-loaded'));
     ui.images.watch(img, meme.id);
     const caption = h('span', { class: 'caption' });
     const badge = h('span', { class: 'badge', text: say('disabled') });
-    const button = h('button', { class: 'cell', type: 'button', role: 'listitem', onclick: () => ui.select(meme.id) },
+    const button = h('button', { class: 'cell enter', type: 'button', role: 'listitem', onclick: () => ui.select(meme.id) },
       h('span', { class: 'thumb' }, img, badge), caption);
     return { button, caption, badge };
   }

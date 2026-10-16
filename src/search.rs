@@ -86,6 +86,32 @@ fn meaning(
     Ok(Some((query, library.vectors(&model)?)))
 }
 
+/// 重新生成语义索引：清掉全部向量，照现在的模型给每一张（停用的也算）重算。交回模型和算了几张；用不了的没有。
+pub fn reindex(library: &Library, embed: &dyn Embed) -> Result<Option<(String, usize)>, Failed> {
+    let memes = library.all(false)?;
+    library.clear_vectors()?;
+    if memes.is_empty() {
+        return Ok(Some((String::new(), 0)));
+    }
+    let mut model: Option<String> = None;
+    let mut done = 0;
+    for chunk in memes.chunks(BATCH) {
+        let texts: Vec<String> = chunk.iter().map(text_of).collect();
+        let Some((same, vectors)) = embed.embed(&texts) else {
+            return Ok(model.map(|model| (model, done)));
+        };
+        if model.as_ref().is_some_and(|first| *first != same) {
+            break;
+        }
+        for (meme, vector) in chunk.iter().zip(vectors) {
+            library.put_vector(&meme.id, &same, &vector)?;
+            done += 1;
+        }
+        model = Some(same);
+    }
+    Ok(model.map(|model| (model, done)))
+}
+
 /// 归一化过的向量的点积就是余弦。
 fn dot(a: &[f32], b: &[f32]) -> f32 {
     a.iter().zip(b).map(|(x, y)| x * y).sum()

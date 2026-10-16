@@ -165,3 +165,71 @@ fn the_page_uploads_base64_as_human_and_reads_images_back() {
     );
     assert_eq!(missing.unwrap_err()["code"], -32000);
 }
+
+/// 答 `model.embed`、`model.call` 的核心：向量照条数给，看图的照一句写好的答。
+struct Thinking;
+
+impl Core for Thinking {
+    fn call(&self, method: &str, params: &Value) -> Answer {
+        match method {
+            "model.embed" => {
+                let n = params["texts"].as_array().map_or(0, Vec::len);
+                Ok(json!({"model": "local:test", "vectors": vec![vec![1.0, 0.0]; n]}))
+            }
+            "model.call" => {
+                assert_eq!(params["use"], "vision");
+                assert_eq!(params["messages"][1]["text"], "Language: zh");
+                Ok(json!({"text": "Description: 一只狗。\nUsage: 困的时候。"}))
+            }
+            _ => Err(json!({"code": -32601})),
+        }
+    }
+}
+
+#[test]
+fn the_page_rebuilds_the_index_and_asks_for_a_new_description_without_saving_it() {
+    let mut state = state();
+    state.core = Arc::new(Thinking);
+    call(
+        &state,
+        &json!({"method": "add", "params": image(&json!({}))}),
+    )
+    .unwrap();
+    let rebuilt = call(&state, &json!({"method": "reindex"})).unwrap();
+    assert_eq!(rebuilt, json!({"model": "local:test", "count": 1}));
+    let described = call(
+        &state,
+        &json!({"method": "describe", "params": {"id": "eeeeeeee", "language": "zh"}}),
+    )
+    .unwrap();
+    assert_eq!(
+        described,
+        json!({"description": "一只狗。", "usage": "困的时候。"})
+    );
+    let got = call(
+        &state,
+        &json!({"method": "get", "params": {"id": "eeeeeeee"}}),
+    )
+    .unwrap();
+    assert_eq!(
+        got["meme"]["description"], "A dog.",
+        "写好的不存，人看了再存"
+    );
+    let missing = call(
+        &state,
+        &json!({"method": "describe", "params": {"id": "nope"}}),
+    );
+    assert_eq!(missing.unwrap_err()["message"], "no such sticker");
+}
+
+#[test]
+fn rebuilding_without_embedding_is_embedding_off() {
+    let state = state();
+    call(
+        &state,
+        &json!({"method": "add", "params": image(&json!({}))}),
+    )
+    .unwrap();
+    let off = call(&state, &json!({"method": "reindex"})).unwrap_err();
+    assert_eq!(off["message"], "embedding_off");
+}

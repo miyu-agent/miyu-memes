@@ -200,6 +200,12 @@ impl Library {
         Ok(changed > 0)
     }
 
+    /// 全部向量清掉（后台页「重新生成语义索引」）。
+    pub fn clear_vectors(&self) -> Result<(), Failed> {
+        self.db.execute("DELETE FROM vectors", [])?;
+        Ok(())
+    }
+
     /// 发了一次。
     pub fn used(&self, id: &str, now: i64) -> Result<(), Failed> {
         self.db.execute(

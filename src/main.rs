@@ -2,6 +2,7 @@
 //! 工作目录是核心给的这个包放状态的目录，库放在那里。
 
 mod calls;
+mod describe;
 mod library;
 mod methods;
 mod packs;

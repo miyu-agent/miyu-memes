@@ -21,7 +21,7 @@ import { openUpload } from './upload.js';
   const app = /** @type {HTMLElement} */ (document.getElementById('app'));
   const state = {
     said: TEXTS.en, channel: null, values: {}, memes: [], query: '', source: 'all', showDisabled: false,
-    selected: null, timer: 0,
+    selected: null, timer: 0, language: 'en',
   };
 
   function pick(language) {
@@ -131,7 +131,45 @@ import { openUpload } from './upload.js';
     reload: () => load(),
     /** 真删了的：不再选着、不再记着它的图。 */
     purged: (id) => { ui.images.forget(id); if (state.selected === id) state.selected = null; return load(); },
+    /** 让 AI 写的字照哪种语言：界面的语言（`zh-CN` 取头一段）。 */
+    language: () => state.language,
+    /** 底下冒一句、过一会儿收起。 */
+    toast,
+    /** 让 AI 写描述没成：说人话。 */
+    describeError: (error) => (String(error?.message ?? '').includes('no vision model')
+      ? say('no_vision') : say('describe_failed', { reason: reasonOf(error) })),
   };
+
+  let toastTimer = 0;
+  const TOAST_MS = 2400;
+  /** 页面底下冒一句（`error` 的是红字），过一会儿收起；新的盖旧的。 */
+  function toast(text, error = false) {
+    let el = document.querySelector('.toast');
+    if (!el) {
+      el = h('div', { class: 'toast', role: 'status' });
+      document.body.append(el);
+    }
+    el.textContent = text;
+    el.classList.toggle('is-error', error);
+    el.classList.add('is-on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('is-on'), TOAST_MS);
+  }
+
+  /** 重新生成语义索引：按钮转着等，好了说给几张生成了。 */
+  async function reindex(button) {
+    button.disabled = true;
+    button.textContent = say('reindexing');
+    try {
+      const got = await call('reindex');
+      toast(say('reindexed', { count: got?.count ?? 0 }));
+    } catch (error) {
+      toast(error?.message === 'embedding_off' ? say('embedding_off') : reasonOf(error), true);
+    } finally {
+      button.disabled = false;
+      button.textContent = say('reindex');
+    }
+  }
 
   let grid;
   let detail;
@@ -178,6 +216,7 @@ import { openUpload } from './upload.js';
     });
     return h('header', { class: 'bar' }, search, source,
       h('label', { class: 'check' }, disabled, h('span', { text: say('show_disabled') })),
+      h('button', { class: 'button', type: 'button', text: say('reindex'), onclick: (event) => reindex(event.currentTarget) }),
       h('button', { class: 'button primary', type: 'button', text: say('upload'), onclick: () => openUpload(ui) }));
   }
 
@@ -195,6 +234,7 @@ import { openUpload } from './upload.js';
     try {
       const context = await state.channel.call('context');
       state.said = pick(context?.language);
+      state.language = String(context?.language ?? 'en').toLowerCase().split(/[-_]/)[0] || 'en';
       document.documentElement.lang = context?.language ?? '';
       look(context?.theme, context?.colors);
       state.values = (await state.channel.call('settings.get'))?.values ?? {};
