@@ -18,7 +18,8 @@ pub fn describe(core: &dyn Core, blob: &str, language: &str) -> Result<(String, 
     let asked = json!({
         "use": "vision",
         "purpose": "meme-describe",
-        "max_tokens": 400,
+        // 会思考的模型先想再写（10-16 实测 cline-pass 的 deepseek：400 全被思考吃光，正文是空的）；不思考的写完就停，多给的用不上。
+        "max_tokens": 4096,
         "messages": [
             {"role": "system", "text": SYSTEM},
             {"role": "user", "text": format!("Language: {language}"), "images": [blob]},
