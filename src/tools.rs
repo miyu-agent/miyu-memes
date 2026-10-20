@@ -12,6 +12,8 @@ struct Spec {
     display: [&'static str; 3],
     /// 时间线上名字后面跟哪个参数（核心 S-6 上的 `subject`）：「挑选表情包 · nvidia 驱动 崩溃」。
     subject: &'static str,
+    /// AI 在命令里写脚本时能用 `miyu call` 调（核心 M-2 的 `clicall`）：只读、搜索类、和会话本身无关的开（项目主人 10-20）。
+    clicall: bool,
 }
 
 /// 五件，照这个先后登记。
@@ -27,6 +29,7 @@ fn specs() -> Vec<Spec> {
             access: "read",
             display: ["挑选表情包", "Pick a sticker", "スタンプを探す"],
             subject: "query",
+            clicall: true,
         },
         Spec {
             name: "meme_send",
@@ -39,6 +42,7 @@ fn specs() -> Vec<Spec> {
             access: "read",
             display: ["发送表情包", "Send a sticker", "スタンプを送る"],
             subject: "id",
+            clicall: false,
         },
         Spec {
             name: "meme_save",
@@ -52,6 +56,7 @@ fn specs() -> Vec<Spec> {
             access: "write",
             display: ["保存表情包", "Save a sticker", "スタンプを保存"],
             subject: "path",
+            clicall: false,
         },
         Spec {
             name: "meme_edit",
@@ -64,6 +69,7 @@ fn specs() -> Vec<Spec> {
             access: "write",
             display: ["编辑表情包", "Edit a sticker", "スタンプを編集"],
             subject: "id",
+            clicall: false,
         },
         Spec {
             name: "meme_delete",
@@ -72,6 +78,7 @@ fn specs() -> Vec<Spec> {
             access: "write",
             display: ["删除表情包", "Delete a sticker", "スタンプを削除"],
             subject: "id",
+            clicall: false,
         },
     ]
 }
@@ -81,7 +88,7 @@ pub fn provide() -> Value {
     let tools: Vec<Value> = specs()
         .into_iter()
         .map(|spec| {
-            json!({
+            let mut tool = json!({
                 "name": spec.name,
                 "description": spec.description,
                 "input_schema": spec.schema,
@@ -89,7 +96,12 @@ pub fn provide() -> Value {
                 "venues": ["local", "private", "group"],
                 "display_name": {"zh": spec.display[0], "en": spec.display[1], "ja": spec.display[2]},
                 "subject": spec.subject,
-            })
+            });
+            // 只有开的才写：不写就是不开。
+            if spec.clicall {
+                tool["clicall"] = Value::Bool(true);
+            }
+            tool
         })
         .collect();
     json!({ "tools": tools })

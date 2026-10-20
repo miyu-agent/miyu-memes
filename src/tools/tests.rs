@@ -46,3 +46,18 @@ fn each_tool_names_the_argument_shown_after_its_name() {
     }
     assert_eq!(provided["tools"][0]["subject"], "query");
 }
+
+#[test]
+fn only_search_is_callable_from_scripts() {
+    // 2026-10-20 项目主人：只读的、搜索类的、和会话本身无关的开给脚本（核心 M-2 的 `clicall`）；发、存、改、删都不开。
+    let provided = provide();
+    let callable: Vec<&str> = provided["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|tool| tool.get("clicall") == Some(&serde_json::Value::Bool(true)))
+        .map(|tool| tool["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(callable, ["meme_search"]);
+    assert!(provided["tools"][1].get("clicall").is_none(), "不开的不写");
+}
