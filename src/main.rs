@@ -146,7 +146,15 @@ fn request(state: &State, method: &str, params: &Value) -> wire::Answer {
                 .unwrap_or_else(PoisonError::into_inner)
                 .all(true)
                 .is_ok_and(|memes| !memes.is_empty());
-            Ok(reminder::answer(&settings, stocked, reminder::roll()))
+            let answer = reminder::answer(&settings, stocked, reminder::roll());
+            // 中了才问 im：关着表情包的群、私聊里不提醒（设计 34 第二节第 9 条）。
+            let hit = answer["content"]
+                .as_array()
+                .is_some_and(|content| !content.is_empty());
+            if hit && reminder::silenced(state.core.as_ref(), params) {
+                return Ok(json!({"content": []}));
+            }
+            Ok(answer)
         }
         "method.call" => methods::call(state, params),
         _ => Err(wire::unknown_method()),

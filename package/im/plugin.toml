@@ -1,0 +1,6 @@
+# 表情包是 im 的插件（设计 34 第二节第 9 条）：哪个平台都能用，默认开；关着的群、私聊里五件工具不出现、不提醒发表情。给人看的字。
+[plugin]
+name = { en = "Memes", zh = "表情包", ja = "スタンプ" }
+summary = { en = "She saves, finds and sends stickers", zh = "她能存、找、发表情包", ja = "スタンプを保存・検索・送信する" }
+icon = "face-slightly-smiling"
+default = true

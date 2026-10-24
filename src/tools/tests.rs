@@ -4,6 +4,8 @@ use super::provide;
 fn five_tools_named_with_the_package_prefix_and_short_descriptions() {
     let provided = provide();
     let tools = provided["tools"].as_array().expect("是数组");
+    // 场所插件（设计 34 第二节第 9 条）：im 关着表情包的群里没有它们。
+    assert!(tools.iter().all(|tool| tool["plugin"] == "miyu-memes"));
     let names: Vec<&str> = tools
         .iter()
         .map(|tool| tool["name"].as_str().unwrap())

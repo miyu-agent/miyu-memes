@@ -17,12 +17,18 @@ about = { en = "Memes package", zh = "表情包", ja = "スタンプ" }
 [process]
 args = ["serve"]
 start = "always"
-# tools：五件工具；context.inject：每一轮掷一次，中了往她要回的那句话后面加一句提醒（user.append）。
-capabilities = ["tools", "context.inject"]
+# tools：五件工具；context.inject：每一轮掷一次，中了往她要回的那句话后面加一句提醒（user.append）；packages.call：提醒以前问 im
+# 的 chat.venue 这个场所开没开表情包（设计 34 第二节第 9 条）。
+capabilities = ["tools", "context.inject", "packages.call"]
 
 # 给别的软件调（核心施工 X-18）：接入QQ 以后「偷表情包」经它放图、按意思找。
 [page]
 dir = "page"
+
+# im 的插件（设计 34 第二节第 9 条，项目主人 10-24 定）：出现在 im 的插件页，场所卡片上能按群开关（默认开）；从插件卡片「打开面板」
+# 进的就是上面的后台页。
+[content.im]
+dir = "im"
 
 [export]
 methods = ["add", "search"]
