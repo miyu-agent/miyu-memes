@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.97"
 publish = false
-license = "GPL-3.0-or-later"
+license = "AGPL-3.0-or-later"
 description = "Miyu 的表情包软件包：她能存、查、发、改、删表情包，按意思搜，隔一阵提醒她发一张。"
 
 [[bin]]
