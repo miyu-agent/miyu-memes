@@ -46,12 +46,14 @@ fn specs() -> Vec<Spec> {
         },
         Spec {
             name: "meme_save",
-            description: "Save an image as a sticker: a file on this computer, or an image in a chat message.",
+            description: "Save a reaction image (not a screenshot or photo) as a sticker: a file on this computer, or an image in a chat message.",
             schema: json!({"type": "object", "properties": {
                 "path": {"type": "string"},
                 "msg": {"type": "string", "description": "The msg= id."},
                 "index": {"type": "integer", "description": "The #n item. Default 1."},
-                "reason": {"type": "string", "description": "Why you keep it."}
+                "reason": {"type": "string", "description": "Why you keep it."},
+                "description": {"type": "string", "description": "What it shows, if you have seen it."},
+                "usage": {"type": "string"}
             }, "required": ["reason"]}),
             access: "write",
             display: ["保存表情包", "Save a sticker", "スタンプを保存"],

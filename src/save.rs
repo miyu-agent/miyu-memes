@@ -1,7 +1,10 @@
 //! 她存一张（`meme_save`，设计 34 第四节；施工 M-9，项目主人 10-26）：图是本机文件（`path`），或者聊天里一条消息的第几张（`msg`、
-//! `index`，经 im 的 `chat.media` 取，带来历：哪个场所、哪一条、谁发的、什么时候）。她只说为什么存（`reason`，必写）；描述、用法
-//! 交模型写：先照人配的看图模型，它做不成的照主模型（`describe::label`），都写不成的不存。同一张已经在库里的直接交回编号，
-//! 不再请模型。谁叫的那一轮都能存（项目主人 10-26）。
+//! `index`，经 im 的 `chat.media` 取，带来历：哪个场所、哪一条、谁发的、什么时候），写为什么存（`reason`，必写）。谁叫的那一轮
+//! 都能存（项目主人 10-26）。
+//!
+//! 描述、用法（施工 M-9 补，项目主人 10-26 改的顺序）：她看到了图（自己看，或者核心替看不了图的模型看过的那段文字）就自己写，
+//! 那时是不是表情包也由她判断（工具说明写着截图、照片不算）；没写的交人配的看图模型写，顺便判断，明显不是表情包的拒收
+//! （`describe::label`）；没配看图模型、看图模型也写不了的存不了，不再退到主模型。同一张已经在库里的直接交回编号，不再请模型。
 
 use std::path::{Path, PathBuf};
 
@@ -45,14 +48,22 @@ pub fn save(library: &Library, core: &dyn Core, args: &Value, call: &Value, max:
     if let Some(id) = library.id_of(hash)? {
         return Ok(ok(&format!("Already saved as {id}.")));
     }
-    let (description, usage) = match label(core, hash, language(reason)) {
-        Ok(labelled) => labelled,
-        Err(error) => {
-            let why = error["message"].as_str().unwrap_or("the model failed");
-            return Ok(fail(&format!(
-                "Not saved, it could not be described: {why}"
-            )));
-        }
+    let (description, usage) = match (text(args, "description"), text(args, "usage")) {
+        (Some(description), Some(usage)) => (description.to_string(), usage.to_string()),
+        _ => match label(core, hash, language(reason)) {
+            Ok(labelled) if !labelled.sticker => {
+                return Ok(fail(
+                    "Not saved: it is a screenshot, photo, document or chart, not a sticker.",
+                ));
+            }
+            Ok(labelled) => (labelled.description, labelled.usage),
+            Err(error) => {
+                let why = error["message"].as_str().unwrap_or("the model failed");
+                return Ok(fail(&format!(
+                    "Not saved: no vision model could describe it ({why}). Give description and usage if you have seen it."
+                )));
+            }
+        },
     };
     let mut source = json!({"kind": "ai"});
     if let (Some(Value::Object(origin)), Some(object)) = (picture.origin, source.as_object_mut()) {

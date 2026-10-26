@@ -1,4 +1,5 @@
-//! 她存一张（施工 M-9）：聊天里的图经 im 取、带来历；描述先照看图模型、没配的照主模型；同一张不再请模型；她只给理由。
+//! 她存一张（施工 M-9、M-9 补）：聊天里的图经 im 取、带来历；她看到了就自己写描述，没写的交看图模型写、顺便判断，不是表情包的
+//! 不存，没有看图模型的不存；同一张不再请模型。
 
 use std::sync::Mutex;
 
@@ -15,7 +16,7 @@ use crate::wire::Answer;
 struct Fake {
     /// im 的 `chat.media` 怎么答。
     media: Answer,
-    /// 看图模型怎么答（主模型照答一份描述）。
+    /// 看图模型怎么答。
     vision: Answer,
     asked: Mutex<Vec<(String, Value)>>,
 }
@@ -56,9 +57,6 @@ impl Core for Fake {
                 "width": 300, "height": 300
             })),
             ("model.call", Some("vision")) => self.vision.clone(),
-            ("model.call", _) => Ok(
-                json!({"text": r#"{"description": "猫说满意了吧。", "usage": "阴阳怪气的时候。"}"#}),
-            ),
             _ => Err(json!({"code": -32601})),
         }
     }
@@ -92,21 +90,17 @@ fn said(done: &Value) -> &str {
 }
 
 #[test]
-fn a_chat_image_is_fetched_from_im_described_and_kept_with_where_it_came_from() {
+fn what_she_saw_she_describes_herself_and_no_model_is_asked() {
     let core = Fake::new(Ok(picture()), no_vision());
     let library = Library::in_memory().unwrap();
-    let args = json!({"msg": "100000", "reason": "这只猫太会阴阳了"});
+    let args = json!({"msg": "100000", "reason": "这只猫太会阴阳了",
+        "description": "橘猫配字「满意了吧」。", "usage": "被逼着让步的时候。"});
     let done = save(&library, &core, &args, &call(), 1 << 20).unwrap();
     assert_eq!(said(&done), "Saved eeeeeeee.", "{done}");
     assert_eq!(
         core.methods(),
-        [
-            "package.call",
-            "blob.put",
-            "model.call:vision",
-            "model.call:chat"
-        ],
-        "看图模型做不成的退到主模型"
+        ["package.call", "blob.put"],
+        "她写了就不请模型"
     );
     let asked = core.asked.lock().unwrap()[0].1.clone();
     assert_eq!(
@@ -115,14 +109,9 @@ fn a_chat_image_is_fetched_from_im_described_and_kept_with_where_it_came_from() 
     );
     let put = core.asked.lock().unwrap()[1].1.clone();
     assert_eq!(put["name"], "39685F13.jpg");
-    assert_eq!(
-        core.asked.lock().unwrap()[2].1["messages"][1]["text"],
-        "Language: zh",
-        "照理由的语言写"
-    );
     let kept = library.get("eeeeeeee").unwrap().unwrap();
-    assert_eq!(kept.description, "猫说满意了吧。");
-    assert_eq!(kept.usage, "阴阳怪气的时候。");
+    assert_eq!(kept.description, "橘猫配字「满意了吧」。");
+    assert_eq!(kept.usage, "被逼着让步的时候。");
     assert_eq!(kept.reason.as_deref(), Some("这只猫太会阴阳了"));
     assert_eq!(kept.source["kind"], "ai");
     assert_eq!(kept.source["venue"], "qq:group:960101");
@@ -131,47 +120,46 @@ fn a_chat_image_is_fetched_from_im_described_and_kept_with_where_it_came_from() 
 }
 
 #[test]
-fn a_configured_vision_model_writes_it_and_the_main_model_is_not_asked() {
-    let vision = Ok(json!({"text": r#"{"description": "A cat.", "usage": "When smug."}"#}));
+fn what_she_did_not_describe_the_vision_model_does_and_judges() {
+    let vision = Ok(
+        json!({"text": r#"{"sticker": true, "description": "猫说满意了吧。", "usage": "阴阳怪气的时候。"}"#}),
+    );
     let core = Fake::new(Ok(picture()), vision);
     let library = Library::in_memory().unwrap();
-    let args = json!({"msg": 100_000, "index": 1, "reason": "Smug cat."});
+    let args =
+        json!({"msg": 100_000, "index": 1, "reason": "这只猫太会阴阳了", "usage": "只写了一样"});
     let done = save(&library, &core, &args, &call(), 1 << 20).unwrap();
     assert_eq!(said(&done), "Saved eeeeeeee.");
     assert_eq!(
         core.methods(),
-        ["package.call", "blob.put", "model.call:vision"]
+        ["package.call", "blob.put", "model.call:vision"],
+        "只写了一样的照没写，交看图模型"
     );
+    let asked = core.asked.lock().unwrap()[2].1.clone();
     assert_eq!(
-        library.get("eeeeeeee").unwrap().unwrap().description,
-        "A cat."
+        asked["messages"][1]["text"], "Language: zh",
+        "照理由的语言写"
+    );
+    assert!(
+        asked["messages"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("sticker"),
+        "顺便判断是不是表情包"
+    );
+    let kept = library.get("eeeeeeee").unwrap().unwrap();
+    assert_eq!(
+        (kept.description.as_str(), kept.usage.as_str()),
+        ("猫说满意了吧。", "阴阳怪气的时候。")
     );
 }
 
 #[test]
-fn one_already_kept_is_not_described_again() {
-    let core = Fake::new(Ok(picture()), no_vision());
-    let library = Library::in_memory().unwrap();
-    let args = json!({"msg": "100000", "reason": "好"});
-    save(&library, &core, &args, &call(), 1 << 20).unwrap();
-    core.asked.lock().unwrap().clear();
-    let again = save(&library, &core, &args, &call(), 1 << 20).unwrap();
-    assert_eq!(said(&again), "Already saved as eeeeeeee.");
-    assert_eq!(core.methods(), ["package.call", "blob.put"], "不再请模型");
-}
-
-#[test]
-fn no_model_that_sees_images_means_nothing_is_kept() {
-    struct Blind(Fake);
-    impl Core for Blind {
-        fn call(&self, method: &str, params: &Value) -> Answer {
-            if method == "model.call" && params["use"] == "chat" {
-                return Err(json!({"code": -32010, "message": "the chat model cannot see images"}));
-            }
-            self.0.call(method, params)
-        }
-    }
-    let core = Blind(Fake::new(Ok(picture()), no_vision()));
+fn what_the_vision_model_calls_no_sticker_is_not_kept() {
+    let vision = Ok(
+        json!({"text": r#"{"sticker": false, "description": "一张模型倍率表的截图。", "usage": "聊模型价格的时候。"}"#}),
+    );
+    let core = Fake::new(Ok(picture()), vision);
     let library = Library::in_memory().unwrap();
     let done = save(
         &library,
@@ -184,7 +172,46 @@ fn no_model_that_sees_images_means_nothing_is_kept() {
     assert_eq!(done["error"], true);
     assert_eq!(
         said(&done),
-        "Not saved, it could not be described: the chat model cannot see images"
+        "Not saved: it is a screenshot, photo, document or chart, not a sticker."
+    );
+    assert!(library.all(false).unwrap().is_empty());
+}
+
+#[test]
+fn one_already_kept_is_not_described_again() {
+    let vision =
+        Ok(json!({"text": r#"{"sticker": true, "description": "猫。", "usage": "好。"}"#}));
+    let core = Fake::new(Ok(picture()), vision);
+    let library = Library::in_memory().unwrap();
+    let args = json!({"msg": "100000", "reason": "好"});
+    save(&library, &core, &args, &call(), 1 << 20).unwrap();
+    core.asked.lock().unwrap().clear();
+    let again = save(&library, &core, &args, &call(), 1 << 20).unwrap();
+    assert_eq!(said(&again), "Already saved as eeeeeeee.");
+    assert_eq!(core.methods(), ["package.call", "blob.put"], "不再请模型");
+}
+
+#[test]
+fn without_a_vision_model_what_she_did_not_describe_is_not_kept() {
+    let core = Fake::new(Ok(picture()), no_vision());
+    let library = Library::in_memory().unwrap();
+    let done = save(
+        &library,
+        &core,
+        &json!({"msg": "1", "reason": "r"}),
+        &call(),
+        1 << 20,
+    )
+    .unwrap();
+    assert_eq!(done["error"], true);
+    assert_eq!(
+        said(&done),
+        "Not saved: no vision model could describe it (no vision model configured: set models.vision). Give description and usage if you have seen it."
+    );
+    assert_eq!(
+        core.methods(),
+        ["package.call", "blob.put", "model.call:vision"],
+        "不再退到主模型"
     );
     assert!(library.all(false).unwrap().is_empty());
 }
