@@ -103,6 +103,7 @@ input[type="checkbox"] { accent-color: var(--accent); margin: 0; }
 .facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; font-size: 13px; }
 .facts dt { color: var(--text-soft); }
 .facts dd { margin: 0; overflow-wrap: anywhere; }
+.facts .part { white-space: nowrap; }
 .actions { display: flex; align-items: center; gap: 8px; }
 .actions .spacer { flex: 1; }
 .note { min-height: 1.5em; margin: 0; color: var(--text-soft); font-size: 13px; }

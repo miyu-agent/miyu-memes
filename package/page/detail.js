@@ -91,10 +91,19 @@ export function detailView(ui) {
     }
   });
 
-  function sourceText(source) {
+  /** 来源的几样：怎么来的，聊天里存的再接哪个群、谁发的、什么时候。 */
+  function sourceParts(source) {
     const kind = source?.kind;
     const named = ['ai', 'human', 'pack', 'package'].includes(kind) ? say(`source/${kind}`) : String(kind ?? '');
-    return [named, ...whence(source)].join(' · ');
+    return [named, ...whence(source)].filter((part) => part !== '');
+  }
+
+  /** 来源那一行：每一样自己不折开（日期不从中间断），折行只折在「·」之间。 */
+  function sourceFact(source) {
+    const parts = sourceParts(source);
+    if (!parts.length) return [];
+    const children = parts.flatMap((part, n) => [...(n ? [' · '] : []), h('span', { class: 'part', text: part })]);
+    return [h('dt', { text: say('source') }), h('dd', {}, ...children)];
   }
 
   /** 聊天里存的（施工 M-9）多几样：哪个群、私聊，谁发的，什么时候。 */
@@ -145,7 +154,7 @@ export function detailView(ui) {
       }
       img.alt = next.description;
       facts.replaceChildren(
-        ...fact('source', sourceText(next.source)),
+        ...sourceFact(next.source),
         ...fact('reason', next.reason ?? ''),
         ...fact('uses', next.uses),
         ...fact('size', `${next.width} × ${next.height}`));
