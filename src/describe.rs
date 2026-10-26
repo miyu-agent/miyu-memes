@@ -1,5 +1,6 @@
 //! 让看图模型写描述和用法（项目主人 10-16：后台页「重新描述」、传图时「让 AI 写」）：经核心的 `model.call`，`use: "vision"`
-//! 照人配的看图模型（核心施工 X-23）。写好的交回页面填进框里，人看了再存，这里不存。给模型的字登记在 `docs/prompt-ledger.md`。
+//! 照人配的看图模型（核心施工 X-23）。写好的交回页面填进框里，人看了再存，这里不存。她存一张（施工 M-9）也照这里写，没配看图模型
+//! 的退到主模型（[`label`]）。给模型的字登记在 `docs/prompt-ledger.md`。
 
 use serde_json::{Value, json};
 
@@ -13,10 +14,28 @@ Write both values in the language named in the request.";
 /// 交回的字写得不对时的原话。
 const UNREADABLE: &str = "the vision reply has no description and usage";
 
-/// 看 `blob` 那张图写描述、用法，照 `language`（`zh`、`en`、`ja`）。交回 `(描述, 用法)`；核心拒了的、写得不对的交回错。
+/// 看 `blob` 那张图写描述、用法，照 `language`（`zh`、`en`、`ja`），用人配的看图模型。交回 `(描述, 用法)`；核心拒了的、写得
+/// 不对的交回错。
 pub fn describe(core: &dyn Core, blob: &str, language: &str) -> Result<(String, String), Value> {
+    describe_with(core, blob, language, "vision")
+}
+
+/// 她存一张时写描述（施工 M-9，项目主人 10-26）：先照人配的看图模型；它做不成的（没配是 `no_model`，配的模型不收图是
+/// `model_failed`，核心 10-26 说的；别的出错也算）照主模型写；主模型也做不成的交回它的错，这一张存不了。核心不把图换成占位
+/// 发给不收图的模型，所以不会对着占位瞎写。
+pub fn label(core: &dyn Core, blob: &str, language: &str) -> Result<(String, String), Value> {
+    describe(core, blob, language).or_else(|_| describe_with(core, blob, language, "chat"))
+}
+
+/// 照用途 `model_use`（`vision`、`chat`，核心 `model.call` 的 `use`）的模型写。
+fn describe_with(
+    core: &dyn Core,
+    blob: &str,
+    language: &str,
+    model_use: &str,
+) -> Result<(String, String), Value> {
     let asked = json!({
-        "use": "vision",
+        "use": model_use,
         "purpose": "meme-describe",
         // 会思考的模型先想再写（10-16 实测 cline-pass 的 deepseek：400 全被思考吃光，正文是空的）；不思考的写完就停，多给的用不上。
         "max_tokens": 4096,

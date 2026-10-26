@@ -7,6 +7,7 @@ mod library;
 mod methods;
 mod packs;
 mod reminder;
+mod save;
 mod search;
 mod settings;
 mod shrink;

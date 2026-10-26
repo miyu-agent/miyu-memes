@@ -7,8 +7,8 @@ use crate::library::Library;
 use crate::settings::Settings;
 use crate::wire::Answer;
 
-/// 假的核心：`blob.put` 照文件名（`path` 或缩过以后交的 `name`）认图，图交一张 2×2 的，`model.embed` 当没配；缩过的那一份
-/// 记在 `PUT_DATA` 里。
+/// 假的核心：`blob.put` 照文件名（`path` 或缩过以后交的 `name`）认图，图交一张 2×2 的，`model.call` 写「A cat.」「Hi.」，
+/// `model.embed` 当没配；缩过的那一份记在 `PUT_DATA` 里。
 struct Fake;
 
 static PUT_DATA: Mutex<Option<(String, usize)>> = Mutex::new(None);
@@ -31,6 +31,7 @@ impl Core for Fake {
                 "width": 2, "height": 2
             })),
             "blob.put" => Ok(json!({"blob": format!("sha256:{}", "d".repeat(64)), "kind": "file"})),
+            "model.call" => Ok(json!({"text": r#"{"description": "A cat.", "usage": "Hi."}"#})),
             _ => Err(json!({"code": -32010, "data": {"reason": "embedding_off"}})),
         }
     }
@@ -62,14 +63,14 @@ fn save_then_send_ends_the_turn_and_carries_the_image() {
     let saved = call(
         &state,
         "meme_save",
-        &json!({"path": "cat.png", "description": "A cat.", "usage": "Hi."}),
+        &json!({"path": "cat.png", "reason": "Cute."}),
         &cwd,
     );
     assert_eq!(said(&saved), "Saved cccccccc.");
     let again = call(
         &state,
         "meme_save",
-        &json!({"path": "cat.png", "description": "x", "usage": "y"}),
+        &json!({"path": "cat.png", "reason": "Again."}),
         &cwd,
     );
     assert_eq!(said(&again), "Already saved as cccccccc.");
@@ -101,7 +102,7 @@ fn bad_inputs_come_back_as_errors_she_can_read() {
     let file = call(
         &state,
         "meme_save",
-        &json!({"path": not_image.to_string_lossy(), "description": "a", "usage": "b"}),
+        &json!({"path": not_image.to_string_lossy(), "reason": "r"}),
         "/",
     );
     assert_eq!(said(&file), "That file is not an image.");
@@ -140,7 +141,7 @@ fn files_over_the_size_limit_are_shrunk_and_junk_is_refused() {
     let done = call(
         &state,
         "meme_save",
-        &json!({"path": big.to_string_lossy(), "description": "a", "usage": "b"}),
+        &json!({"path": big.to_string_lossy(), "reason": "r"}),
         "/",
     );
     assert!(said(&done).starts_with("Saved"), "{done}");
@@ -152,7 +153,7 @@ fn files_over_the_size_limit_are_shrunk_and_junk_is_refused() {
     let refused = call(
         &state,
         "meme_save",
-        &json!({"path": junk.to_string_lossy(), "description": "a", "usage": "b"}),
+        &json!({"path": junk.to_string_lossy(), "reason": "r"}),
         "/",
     );
     assert_eq!(said(&refused), "That file is not an image.");

@@ -124,6 +124,15 @@ impl Library {
         Ok((id, true))
     }
 
+    /// 内容哈希是 `hash` 的那一张的编号（停用的也算）：她存一张时先查，已经在的不再请模型写描述（施工 M-9）。
+    pub fn id_of(&self, hash: &str) -> Result<Option<String>, Failed> {
+        self.db
+            .query_row("SELECT id FROM memes WHERE hash = ?1", [hash], |row| {
+                row.get(0)
+            })
+            .optional()
+    }
+
     /// 哈希的前 8 位十六进制；撞了往后多取。
     fn short_id(&self, hash: &str) -> Result<String, Failed> {
         let hex = hash.strip_prefix("sha256:").unwrap_or(hash);

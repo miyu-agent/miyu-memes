@@ -1,18 +1,14 @@
 //! 五件工具被调到时怎么办（设计 34 第四节）：核心发 `tool.call`，这里照工具名办、交回结果。给她看的字写英文短句，调用以后才用得上
 //! 的写在这里（作者说明第三节第 3 条），不写进工具说明。
 
-use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD;
 use serde_json::{Value, json};
 
-use crate::library::{Library, NewMeme};
+use crate::library::Library;
 use crate::search::{Embed, search};
 use crate::settings::Settings;
-use crate::shrink::{Why, fitted};
 use crate::wire::{Answer, Wire};
 
 /// 核心那一头：测试里换成假的。
@@ -57,15 +53,15 @@ pub fn now() -> i64 {
         })
 }
 
-fn ok(text: &str) -> Value {
+pub(crate) fn ok(text: &str) -> Value {
     json!({"blocks": [{"type": "text", "text": text}]})
 }
 
-fn fail(text: &str) -> Value {
+pub(crate) fn fail(text: &str) -> Value {
     json!({"blocks": [{"type": "text", "text": text}], "error": true})
 }
 
-fn text<'a>(args: &'a Value, key: &str) -> Option<&'a str> {
+pub(crate) fn text<'a>(args: &'a Value, key: &str) -> Option<&'a str> {
     args[key]
         .as_str()
         .map(str::trim)
@@ -85,13 +81,7 @@ pub fn tool(state: &State, params: &Value) -> Value {
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
                 .max_bytes;
-            save(
-                &library,
-                state.core.as_ref(),
-                args,
-                params["cwd"].as_str(),
-                max,
-            )
+            crate::save::save(&library, state.core.as_ref(), args, params, max)
         }
         "meme_edit" => edit(&library, args),
         "meme_delete" => delete(&library, args),
@@ -100,7 +90,7 @@ pub fn tool(state: &State, params: &Value) -> Value {
     done.unwrap_or_else(|error| fail(&format!("The sticker library failed: {error}")))
 }
 
-type Done = Result<Value, rusqlite::Error>;
+pub(crate) type Done = Result<Value, rusqlite::Error>;
 
 fn find(library: &Library, core: &dyn Core, args: &Value) -> Done {
     let Some(query) = text(args, "query") else {
@@ -144,71 +134,6 @@ fn send(library: &Library, args: &Value) -> Done {
         done["end_turn"] = Value::Bool(true);
     }
     Ok(done)
-}
-
-fn save(library: &Library, core: &dyn Core, args: &Value, cwd: Option<&str>, max: u64) -> Done {
-    let (Some(path), Some(description), Some(usage)) = (
-        text(args, "path"),
-        text(args, "description"),
-        text(args, "usage"),
-    ) else {
-        return Ok(fail("Give path, description and usage."));
-    };
-    let path = resolve(path, cwd);
-    let request = match std::fs::metadata(&path) {
-        // 超了先缩（`shrink.rs`）：读进来缩好，按字节交给核心。
-        Ok(meta) if meta.len() > max => {
-            let Ok(bytes) = std::fs::read(&path) else {
-                return Ok(fail("Cannot read that file."));
-            };
-            let name = path
-                .file_name()
-                .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
-            match fitted(bytes, &name, max) {
-                Ok((bytes, name)) => json!({ "data": STANDARD.encode(bytes), "name": name }),
-                Err(Why::NotImage) => return Ok(fail("That file is not an image.")),
-                Err(Why::TooBig) => {
-                    return Ok(fail(&format!(
-                        "The image is over {} MiB and cannot be shrunk to fit: it is animated or too large.",
-                        max / 1024 / 1024
-                    )));
-                }
-            }
-        }
-        Ok(_) => json!({ "path": path }),
-        Err(_) => return Ok(fail("Cannot read that file.")),
-    };
-    let Ok(put) = core.call("blob.put", &request) else {
-        return Ok(fail("Cannot read that file."));
-    };
-    if put["kind"] != "image" {
-        return Ok(fail("That file is not an image."));
-    }
-    let new = NewMeme {
-        hash: put["blob"].as_str().unwrap_or_default().to_string(),
-        media_type: put["media_type"].as_str().unwrap_or_default().to_string(),
-        width: u32::try_from(put["width"].as_u64().unwrap_or(0)).unwrap_or(0),
-        height: u32::try_from(put["height"].as_u64().unwrap_or(0)).unwrap_or(0),
-        description: description.to_string(),
-        usage: usage.to_string(),
-        source: json!({"kind": "ai"}),
-        reason: text(args, "reason").map(str::to_string),
-    };
-    let (id, fresh) = library.add(&new, now())?;
-    Ok(ok(&if fresh {
-        format!("Saved {id}.")
-    } else {
-        format!("Already saved as {id}.")
-    }))
-}
-
-/// 相对路径照这一轮的工作目录。
-fn resolve(path: &str, cwd: Option<&str>) -> PathBuf {
-    let path = Path::new(path);
-    match cwd {
-        Some(cwd) if path.is_relative() => Path::new(cwd).join(path),
-        _ => path.to_path_buf(),
-    }
 }
 
 fn edit(library: &Library, args: &Value) -> Done {

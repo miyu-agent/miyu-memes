@@ -93,7 +93,26 @@ export function detailView(ui) {
 
   function sourceText(source) {
     const kind = source?.kind;
-    return ['ai', 'human', 'pack', 'package'].includes(kind) ? say(`source/${kind}`) : String(kind ?? '');
+    const named = ['ai', 'human', 'pack', 'package'].includes(kind) ? say(`source/${kind}`) : String(kind ?? '');
+    return [named, ...whence(source)].join(' · ');
+  }
+
+  /** 聊天里存的（施工 M-9）多几样：哪个群、私聊，谁发的，什么时候。 */
+  function whence(source) {
+    const parts = [];
+    const [, place, id] = String(source?.venue ?? '').split(':');
+    if (place === 'group' || place === 'private') parts.push(say(`venue/${place}`, { id }));
+    const sender = source?.sender?.name || source?.sender?.id;
+    if (sender) parts.push(sender);
+    if (Number.isFinite(source?.at)) parts.push(when(source.at));
+    return parts;
+  }
+
+  /** 毫秒时刻写成本地的 `2026-10-26 16:22`。 */
+  function when(at) {
+    const d = new Date(at);
+    const two = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}`;
   }
 
   function fact(name, value) {
