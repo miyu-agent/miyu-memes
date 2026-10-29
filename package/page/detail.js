@@ -109,7 +109,9 @@ export function detailView(ui) {
   /** 聊天里存的（施工 M-9）多几样：哪个群、私聊，谁发的，什么时候。 */
   function whence(source) {
     const parts = [];
-    const [, place, id] = String(source?.venue ?? '').split(':');
+    // 场所编号从右边拆：最后一段是号、倒数第二段是种类（im 施工 I-81 起中间多一段机器人号 `qq:<机器人号>:group:<群号>`，号里没有 `:`）。
+    const pieces = String(source?.venue ?? '').split(':');
+    const [place, id] = pieces.length > 2 ? pieces.slice(-2) : [];
     if (place === 'group' || place === 'private') parts.push(say(`venue/${place}`, { id }));
     const sender = source?.sender?.name || source?.sender?.id;
     if (sender) parts.push(sender);
