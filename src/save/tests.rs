@@ -105,7 +105,7 @@ fn what_she_saw_she_describes_herself_and_no_model_is_asked() {
     let asked = core.asked.lock().unwrap()[0].1.clone();
     assert_eq!(
         asked,
-        json!({"package": "im", "method": "chat.media", "params": {"session": "s-1", "msg": "100000", "index": 1}})
+        json!({"package": "miyu-im", "method": "chat.media", "params": {"session": "s-1", "msg": "100000", "index": 1}})
     );
     let put = core.asked.lock().unwrap()[1].1.clone();
     assert_eq!(put["name"], "39685F13.jpg");

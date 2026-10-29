@@ -46,8 +46,7 @@ pub fn silenced(core: &dyn Core, params: &Value) -> bool {
     if !params["venue"].is_string() {
         return false;
     }
-    let asked =
-        json!({"package": "im", "method": "chat.venue", "params": {"session": params["session"]}});
+    let asked = json!({"package": "miyu-im", "method": "chat.venue", "params": {"session": params["session"]}});
     let Ok(answer) = core.call("package.call", &asked) else {
         return false;
     };

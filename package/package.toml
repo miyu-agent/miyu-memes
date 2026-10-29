@@ -25,9 +25,9 @@ capabilities = ["tools", "context.inject", "packages.call"]
 [page]
 dir = "page"
 
-# im 的插件（设计 34 第二节第 9 条，项目主人 10-24 定）：出现在 im 的插件页，场所卡片上能按群开关（默认开）；从插件卡片「打开面板」
+# im 的插件（设计 34 第二节第 9 条，项目主人 10-24 定；im 的包编号 10-30 起是 miyu-im，核心设计 48）：出现在 im 的插件页，场所卡片上能按群开关（默认开）；从插件卡片「打开面板」
 # 进的就是上面的后台页。
-[content.im]
+[content.miyu-im]
 dir = "im"
 
 [export]

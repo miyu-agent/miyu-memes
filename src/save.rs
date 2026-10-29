@@ -116,7 +116,7 @@ fn from_chat(
     let Some(session) = session else {
         return Err(fail("msg works only in a chat."));
     };
-    let asked = json!({"package": "im", "method": "chat.media",
+    let asked = json!({"package": "miyu-im", "method": "chat.media",
         "params": {"session": session, "msg": wanted.msg, "index": wanted.index}});
     let answer = core.call("package.call", &asked).map_err(|error| {
         let (msg, index) = (&wanted.msg, wanted.index);

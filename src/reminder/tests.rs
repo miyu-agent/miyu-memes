@@ -69,7 +69,7 @@ fn a_venue_where_im_says_memes_is_off_gets_no_hint() {
     assert!(super::silenced(&off, &group), "关着的群不提醒");
     assert_eq!(
         off.seen.lock().expect("没 panic")[0],
-        json!({"package": "im", "method": "chat.venue", "params": {"session": "s1"}})
+        json!({"package": "miyu-im", "method": "chat.venue", "params": {"session": "s1"}})
     );
     let on = asked(Ok(json!({"plugins": ["miyu-memes"]})));
     assert!(!super::silenced(&on, &group), "开着的照旧");
