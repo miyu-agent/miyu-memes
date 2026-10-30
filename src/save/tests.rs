@@ -273,3 +273,44 @@ fn the_description_language_follows_the_reason() {
     assert_eq!(language("このネコかわいい"), "ja");
     assert_eq!(language("Smug cat."), "en");
 }
+
+#[test]
+fn a_message_number_copied_with_its_label_is_read_bare() {
+    // 施工 M-11：她照看到的 `[msg=…]` 抄成 `msg-100012` 这类，照编号认；空的、只有外壳的不认。
+    for written in [
+        "100012",
+        " 100012 ",
+        "msg=100012",
+        "msg-100012",
+        "MSG:100012",
+        "[msg=100012]",
+    ] {
+        assert_eq!(
+            super::Wanted::read(&json!({"msg": written})),
+            Some(Ok(super::Wanted {
+                msg: "100012".to_string(),
+                index: 1
+            })),
+            "{written}"
+        );
+    }
+    assert_eq!(
+        super::Wanted::read(&json!({"msg": 100_012, "index": 2})),
+        Some(Ok(super::Wanted {
+            msg: "100012".to_string(),
+            index: 2
+        }))
+    );
+    for empty in ["", "  ", "msg=", "[]"] {
+        assert_eq!(
+            super::Wanted::read(&json!({"msg": empty})),
+            None,
+            "{empty:?}"
+        );
+    }
+    assert_eq!(
+        super::Wanted::read(&json!({"msg": "message7"})).map(|w| w.map(|w| w.msg)),
+        Some(Ok("message7".to_string())),
+        "不是 msg 开头加分隔的照原样"
+    );
+}

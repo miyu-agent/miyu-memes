@@ -91,10 +91,11 @@ struct Wanted {
 }
 
 impl Wanted {
-    /// 读参数：没写 `msg` 的是空的；`msg` 是字或整数，`index` 不写是 1，写了不是正整数的交回错。
+    /// 读参数：没写 `msg` 的是空的；`msg` 是字或整数，`index` 不写是 1，写了不是正整数的交回错。`msg` 照她看到的样子抄成
+    /// `msg=100012`、`msg-100012`、`[msg=100012]` 的也认（施工 M-11：10-30 实测她写成 `msg-100012` 被拒，没再试）。
     fn read(args: &Value) -> Option<Result<Wanted, ()>> {
         let msg = match &args["msg"] {
-            Value::String(msg) if !msg.trim().is_empty() => msg.trim().to_string(),
+            Value::String(msg) => bare(msg)?,
             Value::Number(msg) if msg.is_i64() => msg.to_string(),
             _ => return None,
         };
@@ -104,6 +105,22 @@ impl Wanted {
         };
         Some(index.map(|index| Wanted { msg, index }).ok_or(()))
     }
+}
+
+/// 她写的消息编号去掉抄过来的外壳：前后空白、方括号、`msg` 加 `=`、`-`、`:`。剩下空的是空的。
+fn bare(written: &str) -> Option<String> {
+    let inner = written
+        .trim()
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .trim();
+    let stripped = inner
+        .get(..3)
+        .filter(|head| head.eq_ignore_ascii_case("msg"))
+        .and_then(|_| inner[3..].strip_prefix(['=', '-', ':']))
+        .unwrap_or(inner)
+        .trim();
+    (!stripped.is_empty()).then(|| stripped.to_string())
 }
 
 /// 照 im 的 `chat.media` 取聊天里的那一张（会话 `session` 所在的场所），超了 `max` 的先缩。没取到的交回给她的那一句。
