@@ -79,10 +79,14 @@ impl Fake {
 }
 
 fn state(core: &Arc<Fake>) -> State {
+    state_with(Arc::clone(core) as Arc<dyn Core>)
+}
+
+fn state_with(core: Arc<dyn Core>) -> State {
     State {
         library: Mutex::new(Library::in_memory().unwrap()),
         settings: Mutex::new(Settings::default()),
-        core: Arc::clone(core) as Arc<dyn Core>,
+        core,
     }
 }
 
@@ -216,4 +220,55 @@ fn dropped_entries_and_gone_packs_leave_but_edited_and_human_ones_stay() {
         "不在了的包不再记"
     );
     assert_eq!(sources(&state).len(), 2);
+}
+
+#[test]
+fn a_picture_too_big_for_one_line_is_still_synced() {
+    // 施工 M-12：核心收一行最多 1 MiB；原来整张塞进一条 `blob.put`，大图让核心断开连接（假核心照样拒），这一张就被跳过。
+    let core = Lined::default();
+    let big: Vec<u8> = (0..2 * 1024 * 1024)
+        .map(|at| u8::try_from(at % 241).unwrap())
+        .collect();
+    let index = index(&[("images/big.gif", "u")]);
+    core.inner.pack(
+        "legacy",
+        &[("index.json", &index), ("images/big.gif", &big)],
+    );
+    let state = state_with(Arc::new(core));
+    let synced = sync(&state).unwrap();
+    assert_eq!(synced.added, 1, "{synced:?}");
+    assert_eq!(synced.skipped, 0, "{synced:?}");
+}
+
+/// 套在 [`Fake`] 外面：照真核心的规矩，一行超了 1 MiB 的拒；分块传的照 `blob.put` 记成一张图。
+#[derive(Default)]
+struct Lined {
+    inner: Fake,
+    upload: Mutex<Vec<u8>>,
+}
+
+impl Core for Lined {
+    fn call(&self, method: &str, params: &Value) -> Answer {
+        if json!({"method": method, "params": params})
+            .to_string()
+            .len()
+            > 1024 * 1024
+        {
+            return Err(json!({"message": "line too long"}));
+        }
+        match method {
+            "blob.open" => Ok(json!({"upload": "u-1"})),
+            "blob.write" => {
+                let mut upload = self.upload.lock().unwrap();
+                upload.extend(STANDARD.decode(params["data"].as_str().unwrap()).unwrap());
+                Ok(json!({"received": upload.len()}))
+            }
+            "blob.close" => {
+                let data = STANDARD.encode(&*self.upload.lock().unwrap());
+                self.inner
+                    .call("blob.put", &json!({"data": data, "name": "big.gif"}))
+            }
+            _ => self.inner.call(method, params),
+        }
+    }
 }

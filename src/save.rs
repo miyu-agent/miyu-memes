@@ -16,11 +16,27 @@ use crate::calls::{Core, Done, fail, now, ok, text};
 use crate::describe::label;
 use crate::library::{Library, NewMeme};
 use crate::shrink::{Why, fitted};
+use crate::upload::upload;
 
-/// 一张要存的图：交给核心 `blob.put` 的参数，聊天里来的带来历。
+/// 一张要存的图：怎么交给核心，聊天里来的带来历。
 struct Picture {
-    put: Value,
+    stored: Stored,
     origin: Option<Value>,
+}
+
+/// 交给核心的样子：本机文件照路径交（核心自己读），读进来的字节照 `upload` 交（大的分块传，施工 M-12）。
+enum Stored {
+    Path(PathBuf),
+    Bytes { name: String, bytes: Vec<u8> },
+}
+
+impl Stored {
+    fn put(&self, core: &dyn Core) -> crate::wire::Answer {
+        match self {
+            Stored::Path(path) => core.call("blob.put", &json!({ "path": path })),
+            Stored::Bytes { name, bytes } => upload(core, name, bytes),
+        }
+    }
 }
 
 /// 存一张：`args` 是她给的参数，`call` 是核心的 `tool.call`（带 `session`、`cwd`），`max` 是单张最多多少字节（超了先缩）。
@@ -38,7 +54,7 @@ pub fn save(library: &Library, core: &dyn Core, args: &Value, call: &Value, max:
         Ok(picture) => picture,
         Err(said) => return Ok(said),
     };
-    let Ok(put) = core.call("blob.put", &picture.put) else {
+    let Ok(put) = picture.stored.put(core) else {
         return Ok(fail("Cannot read that image."));
     };
     if put["kind"] != "image" {
@@ -133,8 +149,9 @@ fn from_chat(
     let Some(session) = session else {
         return Err(fail("msg works only in a chat."));
     };
+    // 带 `offset`（施工 M-12）：im I-154 起大图一段一段交；旧的 im 不认这一格，照旧整张交。
     let asked = json!({"package": "miyu-im", "method": "chat.media",
-        "params": {"session": session, "msg": wanted.msg, "index": wanted.index}});
+        "params": {"session": session, "msg": wanted.msg, "index": wanted.index, "offset": 0}});
     let answer = core.call("package.call", &asked).map_err(|error| {
         let (msg, index) = (&wanted.msg, wanted.index);
         // im 拒的原因：核心的 `package.call` 转回来放在 `data.message`（被调的包写的 `message`）。
@@ -147,10 +164,7 @@ fn from_chat(
             },
         )
     })?;
-    let Some(bytes) = answer["data"]
-        .as_str()
-        .and_then(|data| STANDARD.decode(data).ok())
-    else {
+    let Some(bytes) = rest_of(core, &asked, &answer) else {
         return Err(fail("Cannot get that image from the chat."));
     };
     let name = answer["name"].as_str().map_or_else(
@@ -159,9 +173,27 @@ fn from_chat(
     );
     let (bytes, name) = fitted(bytes, &name, max).map_err(|why| too_big(why, max))?;
     Ok(Picture {
-        put: json!({"data": STANDARD.encode(bytes), "name": name}),
+        stored: Stored::Bytes { name, bytes },
         origin: Some(answer["origin"].clone()),
     })
+}
+
+/// 拼出整张图（施工 M-12）：im I-154 起 `chat.media` 带 `offset` 一段一段交（每段一行放得下），`eof` 是假的接着从收到的地方要；
+/// 旧的 im 不认 `offset`、没有 `eof`，第一段就是整张。`first` 是第一段的回应，`asked` 是那一次的 `package.call` 参数。
+fn rest_of(core: &dyn Core, asked: &Value, first: &Value) -> Option<Vec<u8>> {
+    let mut bytes = STANDARD.decode(first["data"].as_str()?).ok()?;
+    let mut answer = first.clone();
+    while answer["eof"] == false {
+        let mut next = asked.clone();
+        next["params"]["offset"] = json!(bytes.len());
+        answer = core.call("package.call", &next).ok()?;
+        let chunk = STANDARD.decode(answer["data"].as_str()?).ok()?;
+        if chunk.is_empty() {
+            return None;
+        }
+        bytes.extend(chunk);
+    }
+    Some(bytes)
 }
 
 /// 本机文件 `path`（相对的照这一轮的工作目录 `cwd`），超了 `max` 的先读进来缩好按字节交。
@@ -177,12 +209,15 @@ fn from_file(path: &str, cwd: Option<&str>, max: u64) -> Result<Picture, Value> 
                 .file_name()
                 .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
             let (bytes, name) = fitted(bytes, &name, max).map_err(|why| too_big(why, max))?;
-            json!({ "data": STANDARD.encode(bytes), "name": name })
+            Stored::Bytes { name, bytes }
         }
-        Ok(_) => json!({ "path": path }),
+        Ok(_) => Stored::Path(path),
         Err(_) => return Err(fail("Cannot read that file.")),
     };
-    Ok(Picture { put, origin: None })
+    Ok(Picture {
+        stored: put,
+        origin: None,
+    })
 }
 
 /// 缩不成的那一句。

@@ -13,6 +13,7 @@ use serde_json::{Value, json};
 use crate::calls::{Core, State, now};
 use crate::library::NewMeme;
 use crate::shrink::fitted;
+use crate::upload::upload;
 
 /// 同一时刻只读一遍：两次推送挨着来，后一遍等前一遍读完。
 static SYNCING: Mutex<()> = Mutex::new(());
@@ -135,14 +136,9 @@ fn size(value: &Value) -> u32 {
     u32::try_from(value.as_u64().unwrap_or(0)).unwrap_or(0)
 }
 
-/// 交给核心存成 blob，是图的交回 `blob.put` 的回应。
+/// 交给核心存成 blob（大的分块传，施工 M-12，`upload`），是图的交回核心的回应。
 fn put(core: &dyn Core, name: &str, bytes: &[u8]) -> Option<Value> {
-    let put = core
-        .call(
-            "blob.put",
-            &json!({"data": STANDARD.encode(bytes), "name": name}),
-        )
-        .ok()?;
+    let put = upload(core, name, bytes).ok()?;
     (put["kind"] == "image").then_some(put)
 }
 

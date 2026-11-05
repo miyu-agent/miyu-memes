@@ -105,7 +105,7 @@ fn what_she_saw_she_describes_herself_and_no_model_is_asked() {
     let asked = core.asked.lock().unwrap()[0].1.clone();
     assert_eq!(
         asked,
-        json!({"package": "miyu-im", "method": "chat.media", "params": {"session": "s-1", "msg": "100000", "index": 1}})
+        json!({"package": "miyu-im", "method": "chat.media", "params": {"session": "s-1", "msg": "100000", "index": 1, "offset": 0}})
     );
     let put = core.asked.lock().unwrap()[1].1.clone();
     assert_eq!(put["name"], "39685F13.jpg");
@@ -312,5 +312,71 @@ fn a_message_number_copied_with_its_label_is_read_bare() {
         super::Wanted::read(&json!({"msg": "message7"})).map(|w| w.map(|w| w.msg)),
         Some(Ok("message7".to_string())),
         "不是 msg 开头加分隔的照原样"
+    );
+}
+
+/// 核心收一行最多多少字节（施工 M-12）。
+const LINE_LIMIT: usize = 1024 * 1024;
+
+/// 假核心加假 im（施工 M-12）：im 照 `offset` 一段一段交一张大图（每段 `page` 字节，带 `eof`），核心照真核心的规矩一行（方法加
+/// 参数写成 JSON）超了 1 MiB 的拒，分块传的拼回来记下。
+struct Paged {
+    picture: Vec<u8>,
+    page: usize,
+    stored: Mutex<Vec<u8>>,
+}
+
+impl Core for Paged {
+    fn call(&self, method: &str, params: &Value) -> Answer {
+        if json!({"method": method, "params": params})
+            .to_string()
+            .len()
+            > LINE_LIMIT
+        {
+            return Err(json!({"message": "line too long"}));
+        }
+        let mut stored = self.stored.lock().unwrap();
+        match method {
+            "package.call" => {
+                let from = usize::try_from(params["params"]["offset"].as_u64().unwrap()).unwrap();
+                let to = (from + self.page).min(self.picture.len());
+                let mut answer = picture();
+                answer["data"] = json!(STANDARD.encode(&self.picture[from..to]));
+                answer["size"] = json!(self.picture.len());
+                answer["eof"] = json!(to == self.picture.len());
+                Ok(answer)
+            }
+            "blob.open" => Ok(json!({"upload": "u-1"})),
+            "blob.write" => {
+                stored.extend(STANDARD.decode(params["data"].as_str().unwrap()).unwrap());
+                Ok(json!({"received": stored.len()}))
+            }
+            "blob.close" => Ok(json!({
+                "blob": format!("sha256:{}", "f".repeat(64)), "kind": "image", "media_type": "image/gif",
+                "width": 240, "height": 240
+            })),
+            _ => Err(json!({"code": -32601})),
+        }
+    }
+}
+
+#[test]
+fn a_big_chat_picture_is_read_in_pages_and_stored_in_chunks() {
+    let picture: Vec<u8> = (0..3 * 1024 * 1024)
+        .map(|at| u8::try_from(at % 253).unwrap())
+        .collect();
+    let core = Paged {
+        picture: picture.clone(),
+        page: 512 * 1024,
+        stored: Mutex::new(Vec::new()),
+    };
+    let library = Library::in_memory().unwrap();
+    let args = json!({"msg": "100000", "reason": "大动图", "description": "猫在转圈。", "usage": "开心的时候。"});
+    let done = save(&library, &core, &args, &call(), 100 << 20).unwrap();
+    assert_eq!(said(&done), "Saved ffffffff.", "{done}");
+    assert_eq!(
+        *core.stored.lock().unwrap(),
+        picture,
+        "分段取、分块存，拼回来一字不差"
     );
 }

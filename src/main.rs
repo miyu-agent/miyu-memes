@@ -12,6 +12,7 @@ mod search;
 mod settings;
 mod shrink;
 mod tools;
+mod upload;
 mod wire;
 
 use std::io::{self, BufRead};
