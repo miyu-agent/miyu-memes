@@ -1,11 +1,14 @@
 use std::sync::{Arc, Mutex};
 
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use serde_json::{Value, json};
 
 use super::call;
 use crate::calls::{Core, State};
 use crate::library::Library;
 use crate::settings::Settings;
+use crate::thumb::tests::{noisy, scratch};
 use crate::wire::Answer;
 
 struct Off;
@@ -158,7 +161,11 @@ fn the_page_uploads_base64_as_human_and_reads_images_back() {
         &json!({"method": "image", "params": {"id": "cccccccc"}}),
     )
     .unwrap();
-    assert_eq!(image, json!({"media_type": "image/png", "data": "iVBO"}));
+    assert_eq!(
+        image,
+        json!({"media_type": "image/png", "data": "iVBO", "size": 3}),
+        "小图不带 offset：和原来一样，多一格 size，没有 next"
+    );
     let missing = call(
         &state,
         &json!({"method": "image", "params": {"id": "nope"}}),
@@ -232,4 +239,90 @@ fn rebuilding_without_embedding_is_embedding_off() {
     .unwrap();
     let off = call(&state, &json!({"method": "reindex"})).unwrap_err();
     assert_eq!(off["message"], "embedding_off");
+}
+
+/// 交回一张真图的核心：`blob.get` 照 `offset`、`length` 给，记下读了几次。
+struct Pictures {
+    bytes: Vec<u8>,
+    reads: Mutex<usize>,
+}
+
+impl Core for Pictures {
+    fn call(&self, method: &str, params: &Value) -> Answer {
+        if method != "blob.get" {
+            return Err(json!({"code": -32601}));
+        }
+        *self.reads.lock().unwrap() += 1;
+        let from = usize::try_from(params["offset"].as_u64().unwrap()).unwrap();
+        let to = (from + usize::try_from(params["length"].as_u64().unwrap()).unwrap())
+            .min(self.bytes.len());
+        Ok(
+            json!({"data": STANDARD.encode(&self.bytes[from.min(to)..to]), "size": self.bytes.len()}),
+        )
+    }
+}
+
+#[test]
+fn the_page_gets_thumbs_and_chunked_originals_and_a_purge_drops_the_cached_thumb() {
+    let dir = scratch("methods-thumb");
+    let core = Arc::new(Pictures {
+        bytes: noisy(700, 700, false),
+        reads: Mutex::new(0),
+    });
+    let state = State {
+        library: Mutex::new(Library::open(&dir.join("library.db")).unwrap()),
+        settings: Mutex::new(Settings::default()),
+        core: Arc::clone(&core) as Arc<dyn Core>,
+    };
+    call(
+        &state,
+        &json!({"method": "add", "params": image(&json!({}))}),
+    )
+    .unwrap();
+    let thumb = call(
+        &state,
+        &json!({"method": "thumb", "params": {"id": "eeeeeeee"}}),
+    )
+    .unwrap();
+    assert_eq!(thumb["media_type"], "image/jpeg");
+    assert!(thumb["data"].as_str().unwrap().len() <= 256 * 1024);
+    let cached = dir.join("thumbs").join("e".repeat(64));
+    assert!(cached.is_file(), "小图缓存在库旁边的 thumbs/，文件名照哈希");
+    // 原图：照 next 一块一块取，接起来就是整张的 base64。
+    let (mut joined, mut offset) = (String::new(), Some(0));
+    while let Some(at) = offset {
+        let piece = call(
+            &state,
+            &json!({"method": "image", "params": {"id": "eeeeeeee", "offset": at}}),
+        )
+        .unwrap();
+        assert_eq!(piece["size"], core.bytes.len());
+        joined.push_str(piece["data"].as_str().unwrap());
+        offset = piece["next"].as_u64();
+    }
+    assert_eq!(STANDARD.decode(joined).unwrap(), core.bytes);
+    let bad = call(
+        &state,
+        &json!({"method": "image", "params": {"id": "eeeeeeee", "offset": "0"}}),
+    );
+    assert_eq!(bad.unwrap_err()["code"], -32602);
+    call(
+        &state,
+        &json!({"method": "purge", "params": {"id": "eeeeeeee"}}),
+    )
+    .unwrap();
+    assert!(!cached.exists(), "删了表情，小图跟着删");
+    drop(state);
+    drop(std::fs::remove_dir_all(dir));
+}
+
+#[test]
+fn every_page_method_is_registered() {
+    let names: Vec<String> = super::register()["methods"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|one| one["name"].as_str().unwrap().to_string())
+        .collect();
+    assert!(names.contains(&"thumb".to_string()) && names.contains(&"image".to_string()));
 }

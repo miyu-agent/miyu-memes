@@ -11,6 +11,7 @@ mod save;
 mod search;
 mod settings;
 mod shrink;
+mod thumb;
 mod tools;
 mod upload;
 mod wire;

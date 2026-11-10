@@ -1,4 +1,4 @@
-// 网格：一张一格，缩略图加描述的头一行；停用的变淡、角上写「已停用」。点一格交给 ui.select。格子照编号留着，重画时只换
+// 网格：一张一格，小图（包的 `thumb`，images.js）加描述的头一行；停用的变淡、角上写「已停用」。点一格交给 ui.select。格子照编号留着，重画时只换
 // 字和选中，图不重取；先后没变就不动 DOM（摘下再挂回去会把进场动画重播一遍，10-16 换一张整页闪）。
 
 /** 描述的头一行（句号、换行为止）。 */
@@ -18,11 +18,14 @@ export function gridView(ui) {
   function cell(meme) {
     const img = h('img', { alt: '', draggable: 'false' });
     img.addEventListener('load', () => img.classList.add('is-loaded'));
-    ui.images.watch(img, meme.id);
+    // 小图取不到的写「加载失败」（施工 M-14），不拦别的格子。
+    const broken = h('span', { class: 'broken', text: say('image_failed') });
+    broken.hidden = true;
+    ui.images.watch(img, meme.id, () => { broken.hidden = false; });
     const caption = h('span', { class: 'caption' });
     const badge = h('span', { class: 'badge', text: say('disabled') });
     const button = h('button', { class: 'cell enter', type: 'button', role: 'listitem', onclick: () => ui.select(meme.id) },
-      h('span', { class: 'thumb' }, img, badge), caption);
+      h('span', { class: 'thumb' }, img, broken, badge), caption);
     button.addEventListener('animationend', () => button.classList.remove('enter'), { once: true });
     return { button, caption, badge };
   }

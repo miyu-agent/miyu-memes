@@ -84,6 +84,10 @@ input[type="checkbox"] { accent-color: var(--accent); margin: 0; }
 .thumb { position: relative; display: grid; aspect-ratio: 1; place-items: center; overflow: hidden; border-radius: var(--radius); background: var(--surface-2); }
 .thumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .thumb img:not([src]) { visibility: hidden; }
+/* 取不到的图：一句「加载失败」叠在格子中间（施工 M-14）。[hidden] 要自己写：上面给了 display。 */
+.broken { grid-area: 1 / 1; padding: 0 6px; color: var(--text-faint); font-size: 12px; text-align: center; }
+.broken[hidden] { display: none; }
+.thumb img, .frame .large { grid-area: 1 / 1; }
 .badge {
   position: absolute; top: 6px; left: 6px; padding: 1px 6px; border-radius: 6px; font-size: 12px;
   background: var(--surface); color: var(--text-soft);

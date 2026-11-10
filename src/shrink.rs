@@ -12,7 +12,7 @@ use image::{AnimationDecoder, DynamicImage, ImageFormat, ImageReader, Limits};
 const SMALLEST: u32 = 64;
 
 /// 解图时最多占多少内存：防一张小文件解出几 GB 的图。
-const DECODE_BYTES: u64 = 256 * 1024 * 1024;
+pub const DECODE_BYTES: u64 = 256 * 1024 * 1024;
 
 /// 缩不进来的原因：交给调的一方照它说的话回。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,7 +64,7 @@ pub fn fit(bytes: &[u8], max: u64) -> Result<Option<Shrunk>, Why> {
 }
 
 /// GIF 有不止一帧。
-fn animated(bytes: &[u8]) -> bool {
+pub fn animated(bytes: &[u8]) -> bool {
     GifDecoder::new(Cursor::new(bytes)).is_ok_and(|decoder| decoder.into_frames().nth(1).is_some())
 }
 

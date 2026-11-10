@@ -13,6 +13,9 @@ export function detailView(ui) {
   const { h, say } = ui;
   const img = h('img', { class: 'large', alt: '' });
   img.addEventListener('load', () => img.classList.add('is-loaded'));
+  // 原图取不到的写「加载失败」（施工 M-14）。
+  const broken = h('span', { class: 'broken', text: say('image_failed') });
+  broken.hidden = true;
   const description = h('textarea', { rows: 4, 'aria-label': say('description') });
   const usage = h('textarea', { rows: 3, 'aria-label': say('usage') });
   const facts = h('dl', { class: 'facts' });
@@ -24,7 +27,7 @@ export function detailView(ui) {
   const close = h('button', { class: 'icon-button', type: 'button', 'aria-label': say('close'), text: '×', onclick: () => ui.select(null) });
   const el = h('aside', { class: 'detail', hidden: true },
     h('div', { class: 'detail-head' }, close),
-    h('div', { class: 'frame' }, img),
+    h('div', { class: 'frame' }, img, broken),
     h('label', { class: 'field' }, h('span', { text: say('description') }), description),
     h('label', { class: 'field' }, h('span', { text: say('usage') }), usage),
     facts,
@@ -147,8 +150,12 @@ export function detailView(ui) {
       if (!same) {
         // 旧图留到新图到了再换，框高固定（style.css .frame）：换一张不塌、不跳。
         if (opening) img.classList.remove('is-loaded');
+        // 原图照 `next` 一块一块取（images.js）。
+        broken.hidden = true;
         ui.images.url(next.id).then((src) => { if (meme?.id === next.id) img.src = src; }, () => {
-          if (meme?.id === next.id) img.removeAttribute('src');
+          if (meme?.id !== next.id) return;
+          img.removeAttribute('src');
+          broken.hidden = false;
         });
         description.value = next.description;
         usage.value = next.usage;

@@ -14,10 +14,10 @@ use crate::search::reindex;
 use crate::search::search;
 use crate::wire::Answer;
 
-/// 登记的方法：后台页的十个，加给别的软件的两个（清单 `[export]`）。
-pub const NAMES: [&str; 12] = [
-    "list", "get", "image", "update", "delete", "restore", "purge", "upload", "add", "search",
-    "describe", "reindex",
+/// 登记的方法：后台页的十一个，加给别的软件的两个（清单 `[export]`）。
+pub const NAMES: [&str; 13] = [
+    "list", "get", "image", "thumb", "update", "delete", "restore", "purge", "upload", "add",
+    "search", "describe", "reindex",
 ];
 
 /// `package.methods` 的参数。
@@ -55,13 +55,27 @@ pub fn call(state: &State, request: &Value) -> Answer {
     let from = request["from"].as_str();
     // 要等核心的两样先办，不拿着库的锁等。
     match request["method"].as_str().unwrap_or_default() {
-        "image" => {
+        method @ ("image" | "thumb") => {
             let id = id_of(params)?;
-            let meme = locked(&state.library)
-                .get(id)
-                .map_err(|error| json!({"code": -32000, "message": error.to_string()}))?
-                .ok_or_else(|| json!({"code": -32000, "message": "no such sticker"}))?;
-            return images::image(state.core.as_ref(), &meme);
+            let (meme, thumbs) = {
+                let library = locked(&state.library);
+                let meme = library
+                    .get(id)
+                    .map_err(|error| json!({"code": -32000, "message": error.to_string()}))?
+                    .ok_or_else(|| json!({"code": -32000, "message": "no such sticker"}))?;
+                (meme, library.thumbs())
+            };
+            if method == "thumb" {
+                return images::thumb(state.core.as_ref(), &meme, thumbs.as_deref());
+            }
+            // 原图一块一块给（施工 M-14）：`offset` 不写是从头。
+            let offset = match params.get("offset") {
+                None | Some(Value::Null) => 0,
+                Some(offset) => offset
+                    .as_u64()
+                    .ok_or_else(|| bad("offset must be a non-negative integer"))?,
+            };
+            return images::image(state.core.as_ref(), &meme, offset);
         }
         "upload" => {
             let max = locked(&state.settings).max_bytes;

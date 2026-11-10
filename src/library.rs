@@ -1,7 +1,7 @@
 //! 表情库（设计 34 第三节「一张表情包」）：工作目录里的 `library.db`。图本身是核心的 blob（`blob.put` 存的），这里只记它的
 //! 哈希、尺寸、描述、用法、来源；编号是哈希的前 8 位十六进制，撞了往后多取。
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
@@ -70,6 +70,8 @@ pub struct NewMeme {
 /// 打开的库。
 pub struct Library {
     db: Connection,
+    /// 小图缓存的目录（施工 M-14）：库旁边的 `thumbs/`。内存里的库没有。
+    thumbs: Option<PathBuf>,
 }
 
 /// 读库出的错：交回原话，工具照它写给她看。
@@ -80,7 +82,11 @@ impl Library {
     pub fn open(path: &Path) -> Result<Library, Failed> {
         let db = Connection::open(path)?;
         db.execute_batch(SCHEMA)?;
-        Ok(Library { db })
+        let thumbs = path.parent().unwrap_or(Path::new("")).join("thumbs");
+        Ok(Library {
+            db,
+            thumbs: Some(thumbs),
+        })
     }
 
     /// 内存里的一份（测试用）。
@@ -88,7 +94,12 @@ impl Library {
     pub fn in_memory() -> Result<Library, Failed> {
         let db = Connection::open_in_memory()?;
         db.execute_batch(SCHEMA)?;
-        Ok(Library { db })
+        Ok(Library { db, thumbs: None })
+    }
+
+    /// 小图缓存放哪（没有的不缓存）。
+    pub fn thumbs(&self) -> Option<PathBuf> {
+        self.thumbs.clone()
     }
 
     /// 存一张：同一张图已经在的交回已有的编号和 `false`，新存的交回新编号和 `true`。
@@ -202,10 +213,19 @@ impl Library {
         Ok(changed > 0)
     }
 
-    /// 真删。
+    /// 真删（人在后台页删、内容包拿掉的都走这里）：缓存的小图跟着删。
     pub fn purge(&self, id: &str) -> Result<bool, Failed> {
+        let hash: Option<String> = self
+            .db
+            .query_row("SELECT hash FROM memes WHERE id = ?1", [id], |row| {
+                row.get(0)
+            })
+            .optional()?;
         self.db.execute("DELETE FROM vectors WHERE id = ?1", [id])?;
         let changed = self.db.execute("DELETE FROM memes WHERE id = ?1", [id])?;
+        if let (Some(dir), Some(hash)) = (&self.thumbs, hash) {
+            crate::thumb::forget(dir, &hash);
+        }
         Ok(changed > 0)
     }
 
