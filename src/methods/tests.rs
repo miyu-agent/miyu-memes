@@ -326,3 +326,53 @@ fn every_page_method_is_registered() {
         .collect();
     assert!(names.contains(&"thumb".to_string()) && names.contains(&"image".to_string()));
 }
+
+#[test]
+fn the_bus_name_memes_reaches_the_same_add_and_search() {
+    // 施工 M-15（核心设计 67，BUS-4）：总线上提供名字 `memes`，核心照 `memes.add`、`memes.search` 转来；不带前缀的照旧登记着
+    // （后台页、人的连接用）。两种叫法是同一件事：回应一样，来源照 `from` 记。
+    let (plain, prefixed) = (state(), state());
+    let params = image(&json!({"reason": "funny", "origin": {"platform": "qq"}}));
+    let ask = |state: &State, method: &str, params: &Value| {
+        call(
+            state,
+            &json!({"method": method, "from": "miyu-im", "params": params}),
+        )
+    };
+    let added = ask(&prefixed, "memes.add", &params).expect("放得进");
+    assert_eq!(added, json!({"id": "eeeeeeee", "created": true}));
+    assert_eq!(ask(&plain, "add", &params).expect("放得进"), added);
+    let got = |state: &State| {
+        let got = call(
+            state,
+            &json!({"method": "get", "params": {"id": "eeeeeeee"}}),
+        )
+        .unwrap();
+        got["meme"]["source"].clone()
+    };
+    assert_eq!(got(&prefixed)["package"], "miyu-im", "来源照 from 记");
+    assert_eq!(got(&prefixed), got(&plain));
+    let query = json!({"query": "Sleepy", "limit": 3});
+    let found = ask(&prefixed, "memes.search", &query).expect("找得到");
+    assert_eq!(found["memes"][0]["id"], "eeeeeeee");
+    assert_eq!(ask(&prefixed, "search", &query).expect("找得到"), found);
+    // 登记的名字：原来的十三个照旧，多带前缀的两个。
+    let registered = super::register();
+    let names: Vec<&str> = registered["methods"]
+        .as_array()
+        .expect("是数组")
+        .iter()
+        .filter_map(|one| one["name"].as_str())
+        .collect();
+    assert_eq!(names.len(), 15, "{names:?}");
+    for name in ["add", "search", "memes.add", "memes.search"] {
+        assert!(names.contains(&name), "{name}");
+    }
+    // 清单里声明了名字、导出的是带前缀的两个（核心照它认 `bus.call` 调不调得到）。
+    let manifest = include_str!("../../package/package.toml");
+    assert!(manifest.contains("provides = [\"memes\"]"), "{manifest}");
+    assert!(
+        manifest.contains("methods = [\"memes.add\", \"memes.search\"]"),
+        "{manifest}"
+    );
+}

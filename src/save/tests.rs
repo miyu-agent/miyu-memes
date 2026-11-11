@@ -51,7 +51,7 @@ impl Core for Fake {
             .unwrap()
             .push((method.to_string(), params.clone()));
         match (method, params["use"].as_str()) {
-            ("package.call", _) => self.media.clone(),
+            ("bus.call", _) => self.media.clone(),
             ("blob.put", _) => Ok(json!({
                 "blob": format!("sha256:{}", "e".repeat(64)), "kind": "image", "media_type": "image/jpeg",
                 "width": 300, "height": 300
@@ -97,15 +97,12 @@ fn what_she_saw_she_describes_herself_and_no_model_is_asked() {
         "description": "橘猫配字「满意了吧」。", "usage": "被逼着让步的时候。"});
     let done = save(&library, &core, &args, &call(), 1 << 20).unwrap();
     assert_eq!(said(&done), "Saved eeeeeeee.", "{done}");
-    assert_eq!(
-        core.methods(),
-        ["package.call", "blob.put"],
-        "她写了就不请模型"
-    );
+    assert_eq!(core.methods(), ["bus.call", "blob.put"], "她写了就不请模型");
     let asked = core.asked.lock().unwrap()[0].1.clone();
     assert_eq!(
         asked,
-        json!({"package": "miyu-im", "method": "chat.media", "params": {"session": "s-1", "msg": "100000", "index": 1, "offset": 0}})
+        json!({"name": "chat", "method": "media", "params": {"session": "s-1", "msg": "100000", "index": 1, "offset": 0}}),
+        "照总线上的名字调（施工 M-15）：不写 im 的包编号，短名一段"
     );
     let put = core.asked.lock().unwrap()[1].1.clone();
     assert_eq!(put["name"], "39685F13.jpg");
@@ -132,7 +129,7 @@ fn what_she_did_not_describe_the_vision_model_does_and_judges() {
     assert_eq!(said(&done), "Saved eeeeeeee.");
     assert_eq!(
         core.methods(),
-        ["package.call", "blob.put", "model.call:vision"],
+        ["bus.call", "blob.put", "model.call:vision"],
         "只写了一样的照没写，交看图模型"
     );
     let asked = core.asked.lock().unwrap()[2].1.clone();
@@ -188,7 +185,7 @@ fn one_already_kept_is_not_described_again() {
     core.asked.lock().unwrap().clear();
     let again = save(&library, &core, &args, &call(), 1 << 20).unwrap();
     assert_eq!(said(&again), "Already saved as eeeeeeee.");
-    assert_eq!(core.methods(), ["package.call", "blob.put"], "不再请模型");
+    assert_eq!(core.methods(), ["bus.call", "blob.put"], "不再请模型");
 }
 
 #[test]
@@ -210,7 +207,7 @@ fn without_a_vision_model_what_she_did_not_describe_is_not_kept() {
     );
     assert_eq!(
         core.methods(),
-        ["package.call", "blob.put", "model.call:vision"],
+        ["bus.call", "blob.put", "model.call:vision"],
         "不再退到主模型"
     );
     assert!(library.all(false).unwrap().is_empty());
@@ -231,7 +228,29 @@ fn im_refusals_come_back_as_sentences_she_can_act_on() {
         let args = json!({"msg": "7", "index": 2, "reason": "r"});
         let done = save(&library, &core, &args, &call(), 1 << 20).unwrap();
         assert_eq!((said(&done), &done["error"]), (sentence, &json!(true)));
-        assert_eq!(core.methods(), ["package.call"], "{reason}");
+        assert_eq!(core.methods(), ["bus.call"], "{reason}");
+    }
+}
+
+#[test]
+fn no_im_on_the_bus_is_the_same_sentence_as_no_im_installed() {
+    // 施工 M-15：没有包提供 `chat`（`no_provider`，照包编号调的时候是 `unknown_package`）、im 没连着（`program_not_running`）
+    // 都是核心自己拒的，没有 `data.message`：同一句，问一次就停。
+    for reason in ["no_provider", "unknown_package", "program_not_running"] {
+        let refused = Err(
+            json!({"code": -32010, "message": reason, "data": {"reason": reason, "name": "chat"}}),
+        );
+        let core = Fake::new(refused, no_vision());
+        let library = Library::in_memory().unwrap();
+        let args = json!({"msg": "7", "reason": "r"});
+        let done = save(&library, &core, &args, &call(), 1 << 20).unwrap();
+        assert_eq!(
+            (said(&done), &done["error"]),
+            ("Cannot get that image from the chat.", &json!(true)),
+            "{reason}"
+        );
+        assert_eq!(core.methods(), ["bus.call"], "{reason}");
+        assert!(library.all(false).unwrap().is_empty());
     }
 }
 
@@ -337,7 +356,13 @@ impl Core for Paged {
         }
         let mut stored = self.stored.lock().unwrap();
         match method {
-            "package.call" => {
+            "bus.call" => {
+                // 分段取的每一次都照总线上的名字调（施工 M-15）。
+                assert_eq!(
+                    (&params["name"], &params["method"]),
+                    (&json!("chat"), &json!("media"))
+                );
+                assert!(params.get("package").is_none(), "不写包编号");
                 let from = usize::try_from(params["params"]["offset"].as_u64().unwrap()).unwrap();
                 let to = (from + self.page).min(self.picture.len());
                 let mut answer = picture();

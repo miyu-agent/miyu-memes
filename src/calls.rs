@@ -11,6 +11,10 @@ use crate::search::{Embed, search};
 use crate::settings::Settings;
 use crate::wire::{Answer, Wire};
 
+/// 总线上的名字（核心设计 67，施工 M-15）：问场所（`chat.venue`）、取聊天里的图（`chat.media`）照它找（`bus.call`），谁提供
+/// `chat` 就问谁（官方的是 im），不写对方的包编号。
+pub const CHAT: &str = "chat";
+
 /// 核心那一头：测试里换成假的。
 pub trait Core: Send + Sync {
     fn call(&self, method: &str, params: &Value) -> Answer;

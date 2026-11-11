@@ -19,11 +19,12 @@ about = { en = "Memes package", zh = "表情包", ja = "スタンプ" }
 [process]
 args = ["serve"]
 start = "always"
-# tools：五件工具；context.inject：每一轮掷一次，中了往她要回的那句话后面加一句提醒（user.append）；packages.call：提醒以前问 im
-# 的 chat.venue 这个场所开没开表情包（设计 34 第二节第 9 条）。
+# tools：五件工具；context.inject：每一轮掷一次，中了往她要回的那句话后面加一句提醒（user.append）；packages.call：照总线上的
+# 名字 `chat` 调 im（`bus.call`，施工 M-15，核心设计 67；`bus.call` 用的就是这一项能力），不写 im 的包编号：提醒以前问 `chat.venue`
+# 这个场所开没开表情包（设计 34 第二节第 9 条），存聊天里的图取 `chat.media`（施工 M-9）。
 capabilities = ["tools", "context.inject", "packages.call"]
 
-# 给别的软件调（核心施工 X-18）：接入QQ 以后「偷表情包」经它放图、按意思找。
+# 后台页（施工 M-4 下）：网页的「软件后台」、im 插件卡片的「打开面板」打开的都是它。
 [page]
 dir = "page"
 
@@ -32,8 +33,12 @@ dir = "page"
 [content.miyu-im]
 dir = "im"
 
+# 给别的软件调（核心施工 X-18）：接入通讯平台以后「偷表情包」经它放图、按意思找。在总线上提供名字 `memes`（施工 M-15，核心
+# 设计 67）：别的包照名字调（`bus.call {"name": "memes", "method": "add"}`、`"search"`），不写这个包的编号；方法照名字带前缀。
+# 不带前缀的 `add`、`search` 程序照旧登记着（后台页、人的连接调得到），不写进这里。
 [export]
-methods = ["add", "search"]
+provides = ["memes"]
+methods = ["memes.add", "memes.search"]
 
 [settings.reminder]
 type = "bool"

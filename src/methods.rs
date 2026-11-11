@@ -1,5 +1,8 @@
 //! 后台页和别的软件调的方法（设计 34 第七节、第九节）：核心发 `method.call {method, params, from?}`，`from` 是调的那个包（核心填，
 //! 核心施工 X-18）；人的后台页调的没有 `from`。图都先经 `blob.put` 传给核心，这里只收 blob 和它的宽高。
+//!
+//! 给别的软件的两个在总线上（施工 M-15，核心设计 67）：清单 `[export]` 声明名字 `memes`、方法 `memes.add`、`memes.search`，别的包
+//! 照名字调（`bus.call {"name": "memes", "method": "add"}`），核心转来的方法名带前缀。
 
 use serde_json::{Value, json};
 
@@ -14,10 +17,24 @@ use crate::search::reindex;
 use crate::search::search;
 use crate::wire::Answer;
 
-/// 登记的方法：后台页的十一个，加给别的软件的两个（清单 `[export]`）。
-pub const NAMES: [&str; 13] = [
-    "list", "get", "image", "thumb", "update", "delete", "restore", "purge", "upload", "add",
-    "search", "describe", "reindex",
+/// 登记的方法：后台页的十一个，加给别的软件的两个。最后两个是总线上名字 `memes` 底下的（施工 M-15，清单 `[export]` 里写的就是
+/// 它们），和不带前缀的 `add`、`search` 是同一件事；不带前缀的照旧登记着，后台页、人的连接还在用。
+pub const NAMES: [&str; 15] = [
+    "list",
+    "get",
+    "image",
+    "thumb",
+    "update",
+    "delete",
+    "restore",
+    "purge",
+    "upload",
+    "add",
+    "search",
+    "describe",
+    "reindex",
+    "memes.add",
+    "memes.search",
 ];
 
 /// `package.methods` 的参数。
@@ -124,8 +141,8 @@ pub fn call(state: &State, request: &Value) -> Answer {
             let id = id_of(params)?;
             library.purge(id).map(|found| json!({ "found": found }))
         }
-        "add" => return put(&library, params, from),
-        "search" => {
+        "add" | "memes.add" => return put(&library, params, from),
+        "search" | "memes.search" => {
             let query = params["query"].as_str().unwrap_or_default();
             let limit = params["limit"].as_u64().map_or(5, |n| n.clamp(1, 50));
             search(

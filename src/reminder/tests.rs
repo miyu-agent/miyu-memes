@@ -39,7 +39,7 @@ fn rolls_stay_in_range_and_vary() {
     assert!(rolls.iter().any(|r| *r != rolls[0]), "不是同一个数");
 }
 
-/// 假的核心：`package.call` 照 `answer` 答，记下问了什么。
+/// 假的核心：`bus.call` 照 `answer` 答，记下问了什么。
 struct Asked {
     answer: crate::wire::Answer,
     seen: std::sync::Mutex<Vec<serde_json::Value>>,
@@ -47,7 +47,7 @@ struct Asked {
 
 impl crate::calls::Core for Asked {
     fn call(&self, method: &str, params: &serde_json::Value) -> crate::wire::Answer {
-        assert_eq!(method, "package.call");
+        assert_eq!(method, "bus.call", "照总线上的名字调（施工 M-15）");
         self.seen.lock().expect("没 panic").push(params.clone());
         self.answer.clone()
     }
@@ -69,14 +69,24 @@ fn a_venue_where_im_says_memes_is_off_gets_no_hint() {
     assert!(super::silenced(&off, &group), "关着的群不提醒");
     assert_eq!(
         off.seen.lock().expect("没 panic")[0],
-        json!({"package": "miyu-im", "method": "chat.venue", "params": {"session": "s1"}})
+        json!({"name": "chat", "method": "venue", "params": {"session": "s1"}}),
+        "不写 im 的包编号，短名一段"
     );
     let on = asked(Ok(json!({"plugins": ["miyu-memes"]})));
     assert!(!super::silenced(&on, &group), "开着的照旧");
     let old = asked(Ok(json!({"venue": "qq:group:31"})));
     assert!(!super::silenced(&old, &group), "旧的 im 不交 plugins：照旧");
-    let gone = asked(Err(json!({"message": "unknown package"})));
-    assert!(!super::silenced(&gone, &group), "问不到 im：照旧");
+    // 没有包提供 `chat`（没装 im，`no_provider`）、im 没连着（`program_not_running`）：问不到，照旧提醒。
+    for reason in ["no_provider", "program_not_running"] {
+        let gone = asked(Err(
+            json!({"code": -32010, "message": reason, "data": {"reason": reason, "name": "chat"}}),
+        ));
+        assert!(
+            !super::silenced(&gone, &group),
+            "问不到 im（{reason}）：照旧"
+        );
+        assert_eq!(gone.seen.lock().expect("没 panic").len(), 1, "问了一次");
+    }
     let local = asked(Ok(json!({"plugins": []})));
     assert!(
         !super::silenced(&local, &json!({"session": "s2", "venue": null})),

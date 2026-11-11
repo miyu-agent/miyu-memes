@@ -1,6 +1,6 @@
 //! 她存一张（`meme_save`，设计 34 第四节；施工 M-9，项目主人 10-26）：图是本机文件（`path`），或者聊天里一条消息的第几张（`msg`、
 //! `index`，经 im 的 `chat.media` 取，带来历：哪个场所、哪一条、谁发的、什么时候），写为什么存（`reason`，必写）。谁叫的那一轮
-//! 都能存（项目主人 10-26）。
+//! 都能存（项目主人 10-26）。取图照总线上的名字 `chat` 调（`bus.call`，施工 M-15，核心设计 67），不写 im 的包编号。
 //!
 //! 描述、用法（施工 M-9 补，项目主人 10-26 改的顺序）：她看到了图（自己看，或者核心替看不了图的模型看过的那段文字）就自己写，
 //! 那时是不是表情包也由她判断（工具说明写着截图、照片不算）；没写的交人配的看图模型写，顺便判断，明显不是表情包的拒收
@@ -12,7 +12,7 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use serde_json::{Value, json};
 
-use crate::calls::{Core, Done, fail, now, ok, text};
+use crate::calls::{CHAT, Core, Done, fail, now, ok, text};
 use crate::describe::label;
 use crate::library::{Library, NewMeme};
 use crate::shrink::{Why, fitted};
@@ -150,16 +150,19 @@ fn from_chat(
         return Err(fail("msg works only in a chat."));
     };
     // 带 `offset`（施工 M-12）：im I-154 起大图一段一段交；旧的 im 不认这一格，照旧整张交。
-    let asked = json!({"package": "miyu-im", "method": "chat.media",
+    let asked = json!({"name": CHAT, "method": "media",
         "params": {"session": session, "msg": wanted.msg, "index": wanted.index, "offset": 0}});
-    let answer = core.call("package.call", &asked).map_err(|error| {
+    let answer = core.call("bus.call", &asked).map_err(|error| {
         let (msg, index) = (&wanted.msg, wanted.index);
-        // im 拒的原因：核心的 `package.call` 转回来放在 `data.message`（被调的包写的 `message`）。
+        // im 拒的原因：核心的 `bus.call` 照 `package.call` 那条路转回来（`method_failed`），放在 `data.message`（被调的包写的
+        // `message`）。
         fail(
             &match error["data"]["message"].as_str().unwrap_or_default() {
                 "not_found" => format!("No message {msg} in this chat."),
                 "no_item" => format!("Message {msg} has no item #{index}."),
                 "not_image" => format!("Item #{index} of message {msg} is not an image."),
+                // 核心自己拒的没有 `data.message`：没有包提供 `chat`（`no_provider`，照包编号调的时候是 `unknown_package`）、
+                // im 没连着（`program_not_running`），和 im 说的别的原因是同一句。
                 _ => "Cannot get that image from the chat.".to_string(),
             },
         )
@@ -179,14 +182,14 @@ fn from_chat(
 }
 
 /// 拼出整张图（施工 M-12）：im I-154 起 `chat.media` 带 `offset` 一段一段交（每段一行放得下），`eof` 是假的接着从收到的地方要；
-/// 旧的 im 不认 `offset`、没有 `eof`，第一段就是整张。`first` 是第一段的回应，`asked` 是那一次的 `package.call` 参数。
+/// 旧的 im 不认 `offset`、没有 `eof`，第一段就是整张。`first` 是第一段的回应，`asked` 是那一次的 `bus.call` 参数。
 fn rest_of(core: &dyn Core, asked: &Value, first: &Value) -> Option<Vec<u8>> {
     let mut bytes = STANDARD.decode(first["data"].as_str()?).ok()?;
     let mut answer = first.clone();
     while answer["eof"] == false {
         let mut next = asked.clone();
         next["params"]["offset"] = json!(bytes.len());
-        answer = core.call("package.call", &next).ok()?;
+        answer = core.call("bus.call", &next).ok()?;
         let chunk = STANDARD.decode(answer["data"].as_str()?).ok()?;
         if chunk.is_empty() {
             return None;

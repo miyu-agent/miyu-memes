@@ -2,14 +2,15 @@
 //! 排在她要回的那句话后面。开关、概率照配置；库里一张能发的都没有的不提醒。原文是给模型看的，登记在 `docs/prompt-ledger.md`。
 //!
 //! 场所会话（群、私聊，`venue` 不空）中了以后先经 im 的 `chat.venue` 看这个场所开着的插件（设计 34 第二节第 9 条，项目主人 10-24：
-//! 表情包按群开关，关着的群里不提醒），`plugins` 里没有表情包的不提醒；问不到 im 的（没装、没答）照旧提醒。
+//! 表情包按群开关，关着的群里不提醒），`plugins` 里没有表情包的不提醒；问不到 im 的（没装、没答）照旧提醒。照总线上的名字 `chat`
+//! 调（`bus.call`，施工 M-15，核心设计 67），不写 im 的包编号。
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{Value, json};
 
-use crate::calls::Core;
+use crate::calls::{CHAT, Core};
 use crate::settings::Settings;
 
 /// 这个包的编号：im 的插件开关照它。
@@ -41,13 +42,14 @@ pub fn answer(settings: &Settings, stocked: bool, rolled: u8) -> Value {
     }
 }
 
-/// `user.append` 的参数 `params` 是场所会话、im 说这个场所关着表情包：交回真。本机会话、问不到 im 的交回假。
+/// `user.append` 的参数 `params` 是场所会话、im 说这个场所关着表情包：交回真。本机会话、问不到 im 的（没有包提供 `chat`
+/// 是 `no_provider`，im 没连着是 `program_not_running`）交回假。
 pub fn silenced(core: &dyn Core, params: &Value) -> bool {
     if !params["venue"].is_string() {
         return false;
     }
-    let asked = json!({"package": "miyu-im", "method": "chat.venue", "params": {"session": params["session"]}});
-    let Ok(answer) = core.call("package.call", &asked) else {
+    let asked = json!({"name": CHAT, "method": "venue", "params": {"session": params["session"]}});
+    let Ok(answer) = core.call("bus.call", &asked) else {
         return false;
     };
     answer["plugins"]
