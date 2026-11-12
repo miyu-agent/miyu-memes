@@ -14,7 +14,7 @@ use crate::calls::{CHAT, Core};
 use crate::settings::Settings;
 
 /// 这个包的编号：im 的插件开关照它。
-const PACKAGE: &str = "miyu-memes";
+const PACKAGE: &str = "memes";
 
 /// 提醒的原文：只说是什么，不下命令（旧版的经验：位置比措辞要紧，排在那句话后面就够）。
 pub const HINT: &str = "<meme-hint>This reply comes with a sticker.</meme-hint>";
