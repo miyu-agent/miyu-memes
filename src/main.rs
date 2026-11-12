@@ -56,7 +56,7 @@ fn serve() -> ExitCode {
         let (wire, state) = (Arc::clone(&wire), Arc::clone(&state));
         std::thread::spawn(move || read(&wire, &state))
     };
-    let hello = json!({"protocol": [1, 1], "head": {"kind": "miyu-memes", "version": env!("CARGO_PKG_VERSION")}});
+    let hello = json!({"protocol": [1, 1], "head": {"kind": "memes", "version": env!("CARGO_PKG_VERSION")}});
     match wire.call("hello", &hello) {
         Ok(answer) => {
             if let Some(config) = answer["config"].as_object() {

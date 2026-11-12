@@ -86,7 +86,7 @@ fn specs() -> Vec<Spec> {
 }
 
 /// 场所插件的名字（核心 O-60，设计 34 第二节第 9 条）：im 在哪个群、私聊关着表情包，那里的工具表就没有这五件；本机会话不看它。
-const PLUGIN: &str = "miyu-memes";
+const PLUGIN: &str = "memes";
 
 /// `provide` 的参数：五件都给三种场所，带 `plugin`。
 pub fn provide() -> Value {

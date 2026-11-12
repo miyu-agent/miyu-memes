@@ -64,7 +64,7 @@ fn asked(answer: crate::wire::Answer) -> Asked {
 fn a_venue_where_im_says_memes_is_off_gets_no_hint() {
     let group = json!({"session": "s1", "venue": "qq:group:31"});
     let off = asked(Ok(
-        json!({"venue": "qq:group:31", "plugins": ["miyu-im-identity"]}),
+        json!({"venue": "qq:group:31", "plugins": ["im-identity"]}),
     ));
     assert!(super::silenced(&off, &group), "关着的群不提醒");
     assert_eq!(
@@ -72,7 +72,7 @@ fn a_venue_where_im_says_memes_is_off_gets_no_hint() {
         json!({"name": "chat", "method": "venue", "params": {"session": "s1"}}),
         "不写 im 的包编号，短名一段"
     );
-    let on = asked(Ok(json!({"plugins": ["miyu-memes"]})));
+    let on = asked(Ok(json!({"plugins": ["memes"]})));
     assert!(!super::silenced(&on, &group), "开着的照旧");
     let old = asked(Ok(json!({"venue": "qq:group:31"})));
     assert!(!super::silenced(&old, &group), "旧的 im 不交 plugins：照旧");

@@ -125,7 +125,7 @@ import { openUpload } from './upload.js';
   const ui = {
     h, say, call, confirmed, reasonOf,
     images: null,
-    maxMb: () => Number(state.values['miyu-memes.max_size_mb'] ?? 5),
+    maxMb: () => Number(state.values['memes.max_size_mb'] ?? 5),
     /** 选中 `id` 那一张（null 是关掉详情）。 */
     select: (id) => { state.selected = id; paint(); },
     /** 改了什么之后：重读一遍。 */

@@ -4,7 +4,7 @@
 use serde_json::Value;
 
 /// 包的编号：配置项的键照它开头。
-const PACKAGE: &str = "miyu-memes";
+const PACKAGE: &str = "memes";
 
 /// 现在的值。
 #[derive(Debug, Clone, PartialEq)]

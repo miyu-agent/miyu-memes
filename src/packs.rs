@@ -1,4 +1,4 @@
-//! 读内容包（设计 34 第三节「内容包」，核心施工 X-22）：写了 `[content.miyu-memes] dir` 的包，经 `content.list` 列、
+//! 读内容包（设计 34 第三节「内容包」，核心施工 X-22）：写了 `[content.memes] dir` 的包，经 `content.list` 列、
 //! `content.read` 读。目录里 `index.json` 是 `{"memes": [{"file", "description", "usage", "reason"?}]}`（旧版的那一份原样认，
 //! 别的格不看），`file` 是目录里的相对路径。起来时读一遍，核心推 `content.changed` 再读一遍；`index.json` 没变的包不再读图。
 //! 同一时刻只读一遍。

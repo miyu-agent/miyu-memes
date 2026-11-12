@@ -336,7 +336,7 @@ fn the_bus_name_memes_reaches_the_same_add_and_search() {
     let ask = |state: &State, method: &str, params: &Value| {
         call(
             state,
-            &json!({"method": method, "from": "miyu-im", "params": params}),
+            &json!({"method": method, "from": "im", "params": params}),
         )
     };
     let added = ask(&prefixed, "memes.add", &params).expect("放得进");
@@ -350,7 +350,7 @@ fn the_bus_name_memes_reaches_the_same_add_and_search() {
         .unwrap();
         got["meme"]["source"].clone()
     };
-    assert_eq!(got(&prefixed)["package"], "miyu-im", "来源照 from 记");
+    assert_eq!(got(&prefixed)["package"], "im", "来源照 from 记");
     assert_eq!(got(&prefixed), got(&plain));
     let query = json!({"query": "Sleepy", "limit": 3});
     let found = ask(&prefixed, "memes.search", &query).expect("找得到");
