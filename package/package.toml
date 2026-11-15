@@ -6,7 +6,7 @@ version = "0.2.0"
 targets = ["linux-x86_64", "macos-aarch64", "windows-x86_64"]
 protocol = [1, 1]
 name = { en = "Memes", zh = "表情包", ja = "スタンプ" }
-summary = { en = "She saves, finds and sends stickers", zh = "她能存、找、发表情包", ja = "スタンプを保存・検索・送信する" }
+summary = { en = "The AI saves, finds and sends stickers", zh = "AI 能存、找、发表情包", ja = "スタンプを保存・検索・送信する" }
 icon = "face-slightly-smiling"
 # 整个包围着图转：显示不了图片的会话（语音）里整包当没开（核心施工 X-25）。
 needs = ["images"]
@@ -45,7 +45,7 @@ type = "bool"
 default = true
 layers = ["system"]
 applies = "now"
-name = { en = "Remind her to send stickers", zh = "自动提醒发表情包", ja = "スタンプを送るようリマインド" }
+name = { en = "Remind the AI to send stickers", zh = "自动提醒发表情包", ja = "スタンプを送るようリマインド" }
 
 [settings.reminder_probability]
 type = "int"
