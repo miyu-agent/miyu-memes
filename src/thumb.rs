@@ -15,9 +15,9 @@ use image::codecs::jpeg::JpegEncoder;
 use image::codecs::png::PngDecoder;
 use image::codecs::webp::WebPDecoder;
 use image::imageops::FilterType;
-use image::{DynamicImage, ImageFormat, ImageReader, Limits};
+use image::{DynamicImage, ImageFormat, ImageReader};
 
-use crate::shrink::{DECODE_BYTES, Why, animated};
+use crate::shrink::{Why, animated, limits};
 
 /// 小图的长边最多多少像素。
 pub const SIDE: u32 = 256;
@@ -41,9 +41,7 @@ pub fn make(bytes: Vec<u8>) -> Result<Thumb, Why> {
         .with_guessed_format()
         .map_err(|_| Why::NotImage)?;
     let format = reader.format().ok_or(Why::NotImage)?;
-    let mut limits = Limits::default();
-    limits.max_alloc = Some(DECODE_BYTES);
-    reader.limits(limits);
+    reader.limits(limits());
     // 动图解出来的是第一帧。
     let image = reader.decode().map_err(|_| Why::NotImage)?;
     let longest = image.width().max(image.height());

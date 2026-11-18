@@ -6,7 +6,7 @@ use std::io::Cursor;
 use image::codecs::gif::GifDecoder;
 use image::codecs::jpeg::JpegEncoder;
 use image::imageops::FilterType;
-use image::{AnimationDecoder, DynamicImage, ImageFormat, ImageReader, Limits};
+use image::{AnimationDecoder, DynamicImage, ImageDecoder, ImageFormat, ImageReader, Limits};
 
 /// 长边最少缩到多少像素：再小就不像那张图了。
 const SMALLEST: u32 = 64;
@@ -41,9 +41,7 @@ pub fn fit(bytes: &[u8], max: u64) -> Result<Option<Shrunk>, Why> {
     if reader.format() == Some(ImageFormat::Gif) && animated(bytes) {
         return Err(Why::TooBig);
     }
-    let mut limits = Limits::default();
-    limits.max_alloc = Some(DECODE_BYTES);
-    reader.limits(limits);
+    reader.limits(limits());
     let image = reader.decode().map_err(|_| Why::NotImage)?;
     let mut side = image.width().max(image.height());
     loop {
@@ -63,9 +61,23 @@ pub fn fit(bytes: &[u8], max: u64) -> Result<Option<Shrunk>, Why> {
     }
 }
 
-/// GIF 有不止一帧。
+/// 解图的上限：至多占 [`DECODE_BYTES`]。
+pub fn limits() -> Limits {
+    let mut limits = Limits::default();
+    limits.max_alloc = Some(DECODE_BYTES);
+    limits
+}
+
+/// GIF 有不止一帧（前两帧都解得开）。照 [`limits`] 解：逻辑屏大得装不下的画布不分配，算不是动图，交给后面带上限的解码去拒。
 pub fn animated(bytes: &[u8]) -> bool {
-    GifDecoder::new(Cursor::new(bytes)).is_ok_and(|decoder| decoder.into_frames().nth(1).is_some())
+    let Ok(mut decoder) = GifDecoder::new(Cursor::new(bytes)) else {
+        return false;
+    };
+    if decoder.set_limits(limits()).is_err() {
+        return false;
+    }
+    let mut frames = decoder.into_frames();
+    matches!((frames.next(), frames.next()), (Some(Ok(_)), Some(Ok(_))))
 }
 
 /// 有透明的编成 PNG，没有的编成 JPEG。
