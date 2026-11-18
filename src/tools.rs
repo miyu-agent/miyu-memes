@@ -14,6 +14,8 @@ struct Spec {
     subject: &'static str,
     /// AI 在命令里写脚本时能用 `miyu call` 调（核心 M-2 的 `clicall`）：只读、搜索类、和会话本身无关的开（项目主人 10-20）。
     clicall: bool,
+    /// 收宿主机路径的参数（核心 XG-1 的 `paths`）：核心照会话的规矩查这些路径（群、陌生人私聊只认工作区里的）。
+    paths: &'static [&'static str],
 }
 
 /// 五件，照这个先后登记。
@@ -30,6 +32,7 @@ fn specs() -> Vec<Spec> {
             display: ["挑选表情包", "Pick a sticker", "スタンプを探す"],
             subject: "query",
             clicall: true,
+            paths: &[],
         },
         Spec {
             name: "meme_send",
@@ -43,6 +46,7 @@ fn specs() -> Vec<Spec> {
             display: ["发送表情包", "Send a sticker", "スタンプを送る"],
             subject: "id",
             clicall: false,
+            paths: &[],
         },
         Spec {
             name: "meme_save",
@@ -59,6 +63,7 @@ fn specs() -> Vec<Spec> {
             display: ["保存表情包", "Save a sticker", "スタンプを保存"],
             subject: "reason",
             clicall: false,
+            paths: &["path"],
         },
         Spec {
             name: "meme_edit",
@@ -72,6 +77,7 @@ fn specs() -> Vec<Spec> {
             display: ["编辑表情包", "Edit a sticker", "スタンプを編集"],
             subject: "id",
             clicall: false,
+            paths: &[],
         },
         Spec {
             name: "meme_delete",
@@ -81,6 +87,7 @@ fn specs() -> Vec<Spec> {
             display: ["删除表情包", "Delete a sticker", "スタンプを削除"],
             subject: "id",
             clicall: false,
+            paths: &[],
         },
     ]
 }
@@ -88,7 +95,7 @@ fn specs() -> Vec<Spec> {
 /// 场所插件的名字（核心 O-60，设计 34 第二节第 9 条）：im 在哪个群、私聊关着表情包，那里的工具表就没有这五件；本机会话不看它。
 const PLUGIN: &str = "memes";
 
-/// `provide` 的参数：五件都给三种场所，带 `plugin`。
+/// `provide` 的参数：五件都给三种场所，带 `plugin`；收路径的带 `paths`。
 pub fn provide() -> Value {
     let tools: Vec<Value> = specs()
         .into_iter()
@@ -106,6 +113,14 @@ pub fn provide() -> Value {
             // 只有开的才写：不写就是不开。
             if spec.clicall {
                 tool["clicall"] = Value::Bool(true);
+            }
+            if !spec.paths.is_empty() {
+                let paths: Vec<Value> = spec
+                    .paths
+                    .iter()
+                    .map(|parameter| json!({ "parameter": parameter }))
+                    .collect();
+                tool["paths"] = Value::Array(paths);
             }
             tool
         })
