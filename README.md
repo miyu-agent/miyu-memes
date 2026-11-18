@@ -18,7 +18,7 @@ miyu pkg install memes
 - im 的插件「表情包」，默认开着。
 - 给别的软件包用的总线方法 `memes.add`、`memes.search`。
 
-现成的图包：`miyu pkg install memes-shorin-collection`。怎么往库里加图、每项设置是什么、出了问题怎么办，见 [附加软件：表情包](https://github.com/miyu-agent/miyu/blob/main/docs/guide/addons.md#表情包-memes)。
+现成的图包：`miyu pkg install memes-shorin-collection`。怎么往库里加图、每项设置是什么、出了问题怎么办，见 [附加软件：表情包](https://github.com/miyu-agent/miyu/blob/main/docs/zh/guide/addons.md#表情包-memes)。
 
 ## 开发
 
