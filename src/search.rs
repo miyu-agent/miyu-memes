@@ -90,11 +90,12 @@ fn meaning(
     Ok(Some((query, library.vectors(&model)?)))
 }
 
-/// 重新生成语义索引：清掉全部向量，照现在的模型给每一张（停用的也算）重算。交回模型和算了几张；用不了的没有。
+/// 重新生成语义索引：照现在的模型给每一张（停用的也算）重算。第一批算出来了才清掉全部旧向量，用不了的旧向量原样留着。
+/// 交回模型和算了几张；用不了的没有。
 pub fn reindex(library: &Library, embed: &dyn Embed) -> Result<Option<(String, usize)>, Failed> {
     let memes = library.all(false)?;
-    library.clear_vectors()?;
     if memes.is_empty() {
+        library.clear_vectors()?;
         return Ok(Some((String::new(), 0)));
     }
     let mut model: Option<String> = None;
@@ -104,8 +105,10 @@ pub fn reindex(library: &Library, embed: &dyn Embed) -> Result<Option<(String, u
         let Some((same, vectors)) = embed.embed(&texts) else {
             return Ok(model.map(|model| (model, done)));
         };
-        if model.as_ref().is_some_and(|first| *first != same) {
-            break;
+        match &model {
+            None => library.clear_vectors()?,
+            Some(first) if *first != same => break,
+            Some(_) => {}
         }
         for (meme, vector) in chunk.iter().zip(vectors) {
             library.put_vector(&meme.id, &same, &vector)?;
