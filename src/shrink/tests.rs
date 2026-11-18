@@ -100,3 +100,63 @@ fn the_extension_follows_the_new_format() {
     assert_eq!(renamed("weird.name.webp", "png"), "weird.name.png");
     assert_eq!(renamed("noext", "jpg"), "noext.jpg");
 }
+
+/// 逻辑屏 65535×65535、两帧各 1×1 的 GIF，用注释块垫到 `at_least` 字节以上（审计 #130）。
+#[cfg(target_os = "linux")]
+fn padded_bomb(at_least: usize) -> Vec<u8> {
+    let mut gif = b"GIF89a".to_vec();
+    gif.extend_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF, 0x80, 0, 0]);
+    gif.extend_from_slice(&[0, 0, 0, 255, 255, 255]);
+    for _ in 0..2 {
+        gif.extend_from_slice(&[0x21, 0xF9, 4, 0, 10, 0, 0, 0]);
+        gif.extend_from_slice(&[0x2C, 0, 0, 0, 0, 1, 0, 1, 0, 0]);
+        gif.extend_from_slice(&[2, 2, 0x44, 0x01, 0]);
+    }
+    gif.extend_from_slice(&[0x21, 0xFE]);
+    while gif.len() < at_least {
+        gif.push(255);
+        gif.extend(std::iter::repeat_n(b'x', 255));
+    }
+    gif.push(0);
+    gif.push(0x3B);
+    gif
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn audit_130_a_gif_bomb_over_the_limit_is_refused_before_its_canvas_is_allocated() {
+    // 审计 #130：字节超过单张上限的 GIF 先过 `animated()`，那里的 `GifDecoder::new` 不带 `Limits`，
+    // 第一帧前照逻辑屏分配一整张画布：65535×65535×4 ≈ 17 GB，几百字节的文件就能把机器压到 OOM。
+    // 不真分配：在子进程里把地址空间限到 2 GiB（`ulimit -v`）再调 `fit`；修好以后应在分配前就拒（Err），
+    // 现在子进程会因「memory allocation of … bytes failed」中止。
+    const MAX: u64 = 1024;
+    if std::env::var_os("MIYU_MEMES_AUDIT_130_CHILD").is_some() {
+        let bomb = padded_bomb(2048);
+        assert!(bomb.len() as u64 > MAX, "要超过上限才会被解码");
+        let got = fit(&bomb, MAX);
+        assert!(
+            matches!(got, Err(Why::TooBig | Why::NotImage)),
+            "炸弹 GIF 应被拒：{got:?}"
+        );
+        return;
+    }
+    let exe = std::env::current_exe().unwrap();
+    let out = std::process::Command::new("sh")
+        .arg("-c")
+        .arg("ulimit -v 2097152 && exec \"$0\" audit_130_a_gif_bomb --test-threads=1 --nocapture")
+        .arg(&exe)
+        .env("MIYU_MEMES_AUDIT_130_CHILD", "1")
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "炸弹 GIF 不该在拒之前分配逻辑屏那么大的画布：{:?}\n{stderr}\n{stdout}",
+        out.status
+    );
+    assert!(
+        stdout.contains("1 passed"),
+        "子进程要真跑到那条测试：{stdout}"
+    );
+}
