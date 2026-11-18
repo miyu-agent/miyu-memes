@@ -63,3 +63,25 @@ fn only_search_is_callable_from_scripts() {
     assert_eq!(callable, ["meme_search"]);
     assert!(provided["tools"][1].get("clicall").is_none(), "不开的不写");
 }
+
+#[test]
+fn audit_128_meme_save_declares_its_path_argument_for_the_core_to_check() {
+    // 审计 #128：`meme_save` 收一个宿主机路径，三种场所都开。核心只对在 `provide` 里声明了 `paths` 的扩展工具按工作区
+    // 判路径（核心 XG-1，`miyu-endpoint/src/provide/declared.rs`）；不声明，群会话、陌生人私聊（confined）也照样放行，
+    // 家目录里的图能被存下再 `meme_send` 到群里。照 miyu-ocr 的 `ocr` 工具写法（`.paths([{"parameter": "path"}])`）。
+    // 这是结构性断言：端到端要起核心 + im + 群会话，在这个仓里测不了。
+    let provided = provide();
+    let save = provided["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["name"] == "meme_save")
+        .expect("有 meme_save");
+    let paths = save["paths"]
+        .as_array()
+        .unwrap_or_else(|| panic!("meme_save 没声明 paths，核心不会按工作区查 path：{save}"));
+    assert!(
+        paths.iter().any(|entry| entry["parameter"] == "path"),
+        "meme_save 的 paths 要指向 path 参数：{paths:?}"
+    );
+}
