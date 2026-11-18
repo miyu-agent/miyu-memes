@@ -1,6 +1,7 @@
 //! 读内容包（设计 34 第三节「内容包」，核心施工 X-22）：写了 `[content.memes] dir` 的包，经 `content.list` 列、
-//! `content.read` 读。目录里 `index.json` 是 `{"memes": [{"file", "description", "usage", "reason"?}]}`（旧版的那一份原样认，
-//! 别的格不看），`file` 是目录里的相对路径。起来时读一遍，核心推 `content.changed` 再读一遍；`index.json` 没变的包不再读图。
+//! `content.read` 读。目录里 `index.json` 是 `{"memes": [{"file", "description", "usage", "reason"?, "tags"?, "name"?}]}`
+//! （旧版的那一份原样认，别的格不看），`file` 是目录里的相对路径；`tags`（字的数组）和 `name`（字，或照语言的字）只拿来搜。
+//! 起来时读一遍，核心推 `content.changed` 再读一遍；`index.json` 和单张上限都没变的包不再读图（上限调大了，上次超限跳过的补进来）。
 //! 同一时刻只读一遍。
 
 use std::collections::HashSet;
@@ -50,7 +51,7 @@ pub fn sync(state: &State) -> Result<Synced, String> {
         let Ok(index) = read_all(core, package, "index.json") else {
             continue;
         };
-        let digest = digest(&index);
+        let digest = format!("{}-{max}", digest(&index));
         if lib(state)
             .pack_digest(package)
             .map_err(|e| e.to_string())?
@@ -125,11 +126,30 @@ fn import(
             source: json!({"kind": "pack", "package": package}),
             reason: text("reason").map(str::to_string),
         };
-        let (_, fresh) = lib(state).add(&new, now()).map_err(|e| e.to_string())?;
+        let library = lib(state);
+        let (id, fresh) = library.add(&new, now()).map_err(|e| e.to_string())?;
+        library
+            .set_keywords(&id, &keywords(entry))
+            .map_err(|e| e.to_string())?;
         synced.added += usize::from(fresh);
         keep.insert(hash);
     }
     Ok(keep)
+}
+
+/// 一条里只拿来搜的词：`tags` 的每一个，`name` 是字的那个或照语言的每一个；空格隔开。
+fn keywords(entry: &Value) -> String {
+    let tags = entry["tags"].as_array().into_iter().flatten();
+    let names: Vec<&Value> = match &entry["name"] {
+        Value::Object(by_language) => by_language.values().collect(),
+        other => vec![other],
+    };
+    tags.chain(names)
+        .filter_map(Value::as_str)
+        .map(str::trim)
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn size(value: &Value) -> u32 {

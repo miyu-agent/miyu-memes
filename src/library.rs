@@ -36,6 +36,28 @@ CREATE TABLE IF NOT EXISTS packs (
 );
 ";
 
+/// 后加的列（只加不改）：旧库里没有的补上。
+const ADDED: [(&str, &str); 1] = [(
+    "keywords",
+    "ALTER TABLE memes ADD COLUMN keywords TEXT NOT NULL DEFAULT ''",
+)];
+
+/// 建表，补上旧库缺的列。
+fn prepare(db: &Connection) -> Result<(), Failed> {
+    db.execute_batch(SCHEMA)?;
+    for (column, add) in ADDED {
+        let have: i64 = db.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('memes') WHERE name = ?1",
+            [column],
+            |row| row.get(0),
+        )?;
+        if have == 0 {
+            db.execute_batch(add)?;
+        }
+    }
+    Ok(())
+}
+
 /// 一张表情包。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Meme {
@@ -52,6 +74,9 @@ pub struct Meme {
     pub reason: Option<String>,
     pub enabled: bool,
     pub uses: u64,
+    /// 只拿来搜的词：内容包 `index.json` 里的 `tags`、`name`，空格隔开。
+    #[serde(skip)]
+    pub keywords: String,
 }
 
 /// 存一张新的要交的。
@@ -81,7 +106,7 @@ impl Library {
     /// 打开 `path`（没有的建上）。
     pub fn open(path: &Path) -> Result<Library, Failed> {
         let db = Connection::open(path)?;
-        db.execute_batch(SCHEMA)?;
+        prepare(&db)?;
         let thumbs = path.parent().unwrap_or(Path::new("")).join("thumbs");
         Ok(Library {
             db,
@@ -93,7 +118,7 @@ impl Library {
     #[cfg(test)]
     pub fn in_memory() -> Result<Library, Failed> {
         let db = Connection::open_in_memory()?;
-        db.execute_batch(SCHEMA)?;
+        prepare(&db)?;
         Ok(Library { db, thumbs: None })
     }
 
@@ -204,6 +229,18 @@ impl Library {
         Ok(changed > 0)
     }
 
+    /// 换掉只拿来搜的词。变了的旧向量作废（算向量的字里有它们）。交回变没变。
+    pub fn set_keywords(&self, id: &str, keywords: &str) -> Result<bool, Failed> {
+        let changed = self.db.execute(
+            "UPDATE memes SET keywords = ?2 WHERE id = ?1 AND keywords IS NOT ?2",
+            params![id, keywords],
+        )?;
+        if changed > 0 {
+            self.db.execute("DELETE FROM vectors WHERE id = ?1", [id])?;
+        }
+        Ok(changed > 0)
+    }
+
     /// 停用、找回。
     pub fn set_enabled(&self, id: &str, enabled: bool) -> Result<bool, Failed> {
         let changed = self.db.execute(
@@ -271,7 +308,7 @@ impl Library {
     }
 }
 
-const SELECT: &str = "SELECT id, hash, media_type, width, height, description, usage, source, reason, enabled, uses FROM memes";
+const SELECT: &str = "SELECT id, hash, media_type, width, height, description, usage, source, reason, enabled, uses, keywords FROM memes";
 
 fn meme_of(row: &rusqlite::Row<'_>) -> rusqlite::Result<Meme> {
     let source: String = row.get(7)?;
@@ -287,6 +324,7 @@ fn meme_of(row: &rusqlite::Row<'_>) -> rusqlite::Result<Meme> {
         reason: row.get(8)?,
         enabled: row.get(9)?,
         uses: row.get(10)?,
+        keywords: row.get(11)?,
     })
 }
 

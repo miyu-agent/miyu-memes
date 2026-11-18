@@ -14,9 +14,13 @@ type Meaning = (Vec<f32>, Vec<(String, Vec<f32>)>);
 /// 一次至多补算几张（`model.embed` 一批至多 64 条）。
 const BATCH: usize = 64;
 
-/// 拿去算向量的字：描述加用法。
+/// 拿去算向量、比关键词的字：描述、用法，加内容包给的检索词。
 fn text_of(meme: &Meme) -> String {
-    format!("{} {}", meme.description, meme.usage)
+    if meme.keywords.is_empty() {
+        format!("{} {}", meme.description, meme.usage)
+    } else {
+        format!("{} {} {}", meme.description, meme.usage, meme.keywords)
+    }
 }
 
 /// 照 `query` 找，至多 `limit` 张，最像的在前；停用的不算。

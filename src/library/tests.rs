@@ -70,3 +70,30 @@ fn vectors_round_trip_per_model() {
         "换了模型的不算"
     );
 }
+
+#[test]
+fn an_old_library_gets_the_keywords_column_and_changed_keywords_drop_vectors() {
+    let db = rusqlite::Connection::open_in_memory().unwrap();
+    db.execute_batch(
+        "CREATE TABLE memes (id TEXT PRIMARY KEY, hash TEXT NOT NULL UNIQUE, media_type TEXT NOT NULL,
+         width INTEGER NOT NULL, height INTEGER NOT NULL, description TEXT NOT NULL, usage TEXT NOT NULL,
+         source TEXT NOT NULL, reason TEXT, enabled INTEGER NOT NULL DEFAULT 1, uses INTEGER NOT NULL DEFAULT 0,
+         last_used INTEGER, created INTEGER NOT NULL);",
+    )
+    .unwrap();
+    super::prepare(&db).unwrap();
+    super::prepare(&db).unwrap();
+    let library = Library { db, thumbs: None };
+    let (id, _) = library.add(&meme("ab"), 1).unwrap();
+    assert_eq!(library.get(&id).unwrap().unwrap().keywords, "");
+    library.put_vector(&id, "m", &[1.0]).unwrap();
+    assert!(library.set_keywords(&id, "KFC").unwrap());
+    assert_eq!(library.get(&id).unwrap().unwrap().keywords, "KFC");
+    assert!(
+        library.vectors("m").unwrap().is_empty(),
+        "检索词变了，旧向量作废"
+    );
+    library.put_vector(&id, "m", &[1.0]).unwrap();
+    assert!(!library.set_keywords(&id, "KFC").unwrap(), "没变的不动");
+    assert_eq!(library.vectors("m").unwrap().len(), 1);
+}
