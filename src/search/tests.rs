@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 use serde_json::json;
 
-use super::{Embed, search};
+use super::{Embed, reindex, search};
 use crate::library::{Library, NewMeme};
 
 /// 假的算向量：照字里有没有「猫」「狗」给二维向量；`off` 的当没配。
@@ -81,4 +81,28 @@ fn without_embedding_keywords_still_find_and_misses_are_empty() {
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].description, "一只狗在睡觉");
     assert!(search(&library, &fake, "火箭", 5).unwrap().is_empty());
+}
+
+#[test]
+fn audit_131_reindex_with_embedding_off_keeps_the_vectors_it_had() {
+    // 审计 #131：`reindex` 先 `clear_vectors()` 再第一次调 embed；embed 用不了（没配、断了）时交回 `Ok(None)`，
+    // 原有的向量已经清光，要等下次搜索再白算一遍。应先算出第一批再清。
+    let library = library();
+    let on = Fake {
+        off: false,
+        asked: RefCell::new(0),
+    };
+    search(&library, &on, "小猫", 5).unwrap();
+    let before = library.vectors("emb/fake").unwrap().len();
+    assert_eq!(before, 2, "先让两张都有向量");
+    let off = Fake {
+        off: true,
+        asked: RefCell::new(0),
+    };
+    assert!(reindex(&library, &off).unwrap().is_none(), "embed 用不了");
+    assert_eq!(
+        library.vectors("emb/fake").unwrap().len(),
+        before,
+        "embed 用不了时重建索引不该先把已有的向量清掉"
+    );
 }
