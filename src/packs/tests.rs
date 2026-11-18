@@ -272,3 +272,78 @@ impl Core for Lined {
         }
     }
 }
+
+/// 算向量的那一头没配：搜索只按关键词。
+struct NoEmbed;
+
+impl crate::search::Embed for NoEmbed {
+    fn embed(&self, _: &[String]) -> Option<(String, Vec<Vec<f32>>)> {
+        None
+    }
+}
+
+#[test]
+fn audit_129_tags_and_name_from_the_index_are_searchable() {
+    // 审计 #129：官方图包 index.json 每条都有 `tags` 和 `name`（collection 里 38 条有 32 条的检索词只在 tags 里），
+    // 导入只读 file/description/usage/reason，按 tags、name 搜不到。
+    let core = Arc::new(Fake::default());
+    let index = json!({"memes": [{
+        "file": "images/kfc.png",
+        "name": {"zh": "疯狂星期四", "en": "Crazy Thursday"},
+        "description": "一只炸鸡腿",
+        "usage": "饿了的时候",
+        "tags": ["KFC", "v我50"]
+    }]})
+    .to_string()
+    .into_bytes();
+    core.pack(
+        "shorin",
+        &[("index.json", &index), ("images/kfc.png", b"kfc-image")],
+    );
+    let state = state(&core);
+    assert_eq!(sync(&state).unwrap().added, 1);
+    let library = state.library.lock().unwrap();
+    for query in ["KFC", "v我50", "疯狂星期四", "Crazy Thursday"] {
+        let found = crate::search::search(&library, &NoEmbed, query, 5).unwrap();
+        assert_eq!(
+            found.len(),
+            1,
+            "按 index.json 里的 tags / name「{query}」应该搜得到"
+        );
+    }
+}
+
+#[test]
+fn audit_129_a_pack_with_skipped_pictures_is_read_again_after_the_limit_grows() {
+    // 审计 #129：超过单张上限的动图被跳过，可循环后照样 `set_pack` 记下摘要；摘要只算 index.json，
+    // 主人把上限调大以后再 sync，整个包被当成「没变」跳过，那张永远补不进来。
+    let mut gif = Vec::new();
+    {
+        let mut encoder = image::codecs::gif::GifEncoder::new(&mut gif);
+        for shade in [0_u8, 255] {
+            let frame =
+                image::RgbaImage::from_pixel(16, 16, image::Rgba([shade, shade, shade, 255]));
+            encoder
+                .encode_frame(image::Frame::from_parts(
+                    frame,
+                    0,
+                    0,
+                    image::Delay::from_numer_denom_ms(100, 1),
+                ))
+                .unwrap();
+        }
+    }
+    let core = Arc::new(Fake::default());
+    let index = index(&[("moving.gif", "u")]);
+    core.pack("shorin", &[("index.json", &index), ("moving.gif", &gif)]);
+    let state = state(&core);
+    state.settings.lock().unwrap().max_bytes = 10;
+    let first = sync(&state).unwrap();
+    assert_eq!((first.added, first.skipped), (0, 1), "动图超了上限跳过");
+    state.settings.lock().unwrap().max_bytes = 5 * 1024 * 1024;
+    let second = sync(&state).unwrap();
+    assert_eq!(
+        second.added, 1,
+        "上限调大后再读，上次跳过的那张应补进来：{second:?}"
+    );
+}
